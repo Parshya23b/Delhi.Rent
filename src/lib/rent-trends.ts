@@ -3,13 +3,20 @@ import type { RentEntry } from "@/types/rent";
 
 export type MonthPoint = { key: string; label: string; median: number; count: number };
 
-/** Median rent by calendar month using created_at (submission time). */
+function monthKeyForEntry(e: RentEntry): string | null {
+  const move = e.move_in_month?.trim();
+  if (move && /^\d{4}-\d{2}$/.test(move)) return move;
+  const d = new Date(e.created_at);
+  if (Number.isNaN(d.getTime())) return null;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/** Median rent by month: prefers `move_in_month` (YYYY-MM) when set; else submission month from `created_at`. */
 export function medianRentByMonth(entries: RentEntry[], maxMonths = 12): MonthPoint[] {
   const byMonth = new Map<string, number[]>();
   for (const e of entries) {
-    const d = new Date(e.created_at);
-    if (Number.isNaN(d.getTime())) continue;
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const key = monthKeyForEntry(e);
+    if (!key) continue;
     if (!byMonth.has(key)) byMonth.set(key, []);
     byMonth.get(key)!.push(e.rent_inr);
   }

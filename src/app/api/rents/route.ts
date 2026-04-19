@@ -1,4 +1,9 @@
 import { NextResponse } from "next/server";
+import {
+  hasRecentDuplicateInSupabase,
+  hasRecentDuplicateMemory,
+  recordSubmittedPinMemory,
+} from "@/lib/duplicate-submission";
 import { hashDeviceId } from "@/lib/device-hash";
 import { loadRecentRentEntries } from "@/lib/load-recent-rents";
 import {
@@ -39,20 +44,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const bbox = parseBbox(searchParams);
 
-  const inBox = (lat: number, lng: number) => {
-    if (!bbox) return true;
-    return (
-      lat >= bbox.minLat &&
-      lat <= bbox.maxLat &&
-      lng >= bbox.minLng &&
-      lng <= bbox.maxLng
-    );
-  };
-
-  let rows = await loadRecentRentEntries();
-  if (bbox) {
-    rows = rows.filter((r) => inBox(r.lat, r.lng));
-  }
+  const rows = await loadRecentRentEntries({ bbox: bbox ?? undefined });
 
   return NextResponse.json({ entries: rows });
 }
@@ -237,6 +229,30 @@ export async function POST(req: Request) {
     }
   }
 
+  if (supabase) {
+    if (await hasRecentDuplicateInSupabase(supabase, deviceHash, lat, lng)) {
+      return NextResponse.json(
+        {
+          error:
+            "You already placed a pin here recently. Move the pin slightly or try again in a day or two.",
+          code: "DUPLICATE_LOCATION",
+          field: "general",
+        },
+        { status: 409 },
+      );
+    }
+  } else if (hasRecentDuplicateMemory(deviceHash, lat, lng)) {
+    return NextResponse.json(
+      {
+        error:
+          "You already placed a pin here recently. Move the pin slightly or try again in a day or two.",
+        code: "DUPLICATE_LOCATION",
+        field: "general",
+      },
+      { status: 409 },
+    );
+  }
+
   const nearbyAmounts = await collectNearbyRentAmountsForMedian(
     lat,
     lng,
@@ -270,6 +286,7 @@ export async function POST(req: Request) {
     };
     registerLocalEntryAuthor(entry.id, deviceIdRaw);
     recordSubmission(deviceHash);
+    recordSubmittedPinMemory(deviceHash, lat, lng);
     return entry;
   };
 

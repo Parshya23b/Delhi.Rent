@@ -28,6 +28,7 @@ import {
 } from "@/lib/watchlist-storage";
 import { localityContributionCounts } from "@/lib/locality-leaderboard";
 import { medianRentByMonth } from "@/lib/rent-trends";
+import { bboxFromCenterZoom } from "@/lib/viewport-bbox";
 import {
   computeAreaStats,
   entriesNearPoint,
@@ -38,7 +39,14 @@ import type { FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import Link from "next/link";
 import mapboxgl from "mapbox-gl";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 const CYBER_CITY = { lng: 77.0884, lat: 28.4942 };
 
@@ -139,13 +147,20 @@ export function MapExplorer() {
   }, [searchParams, setMapFilters]);
 
   useEffect(() => {
+    if (heatUrlInit.current) return;
+    heatUrlInit.current = true;
+    if (searchParams.get("heat") === "1") {
+      setShowHeatmap(true);
+    }
+  }, [searchParams, setShowHeatmap]);
+
+  useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
         const res = await fetch("/api/rents");
         const data = await res.json();
         if (!cancelled && data.entries) {
-          // Merge so we never wipe a pin the user just added if the response arrives late.
           mergeEntries(data.entries as RentEntry[]);
         }
       } catch {
@@ -156,6 +171,56 @@ export function MapExplorer() {
       cancelled = true;
     };
   }, [mergeEntries]);
+
+  useEffect(() => {
+    if (!viewport) return;
+    let cancelled = false;
+    const ctrl = new AbortController();
+    const t = window.setTimeout(() => {
+      const b = bboxFromCenterZoom(viewport.lat, viewport.lng, viewport.zoom);
+      const q = new URLSearchParams({
+        minLat: String(b.minLat),
+        maxLat: String(b.maxLat),
+        minLng: String(b.minLng),
+        maxLng: String(b.maxLng),
+      });
+      void fetch(`/api/rents?${q}`, { signal: ctrl.signal })
+        .then((r) => r.json())
+        .then((data: { entries?: RentEntry[] }) => {
+          if (cancelled || !data.entries) return;
+          mergeEntries(data.entries as RentEntry[]);
+        })
+        .catch(() => {});
+    }, 600);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+      ctrl.abort();
+    };
+  }, [viewport, mergeEntries]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !viewport) return;
+    const id = window.setTimeout(() => {
+      const u = new URL(window.location.href);
+      u.searchParams.set("lat", viewport.lat.toFixed(5));
+      u.searchParams.set("lng", viewport.lng.toFixed(5));
+      u.searchParams.set("zoom", String(Math.round(viewport.zoom * 100) / 100));
+      if (mapFilters.bhk !== "all") {
+        u.searchParams.set("bhk", mapFilters.bhk);
+      } else {
+        u.searchParams.delete("bhk");
+      }
+      if (showHeatmap) u.searchParams.set("heat", "1");
+      else u.searchParams.delete("heat");
+      if (insightsExpanded) u.searchParams.set("insights", "1");
+      else u.searchParams.delete("insights");
+      const next = `${u.pathname}${u.search}`;
+      const cur = `${window.location.pathname}${window.location.search}`;
+      if (next !== cur) window.history.replaceState(null, "", next);
+    }, 480);
+    return () => clearTimeout(id);
+  }, [viewport, mapFilters.bhk, showHeatmap, insightsExpanded]);
 
   const filteredEntries = useMemo(
     () => filterRentEntries(entries, mapFilters),
@@ -169,6 +234,10 @@ export function MapExplorer() {
 
   const mapInstanceRef = useRef<mapboxgl.Map | null>(null);
   const [howToOpen, setHowToOpen] = useState(false);
+  const [insightsExpanded, setInsightsExpanded] = useState(
+    () => searchParams.get("insights") === "1",
+  );
+  const heatUrlInit = useRef(false);
 
   const vpLat = viewport?.lat;
   const vpLng = viewport?.lng;
@@ -321,8 +390,10 @@ export function MapExplorer() {
     u.searchParams.set("lng", String(viewport.lng));
     u.searchParams.set("zoom", String(Math.round(viewport.zoom * 100) / 100));
     if (mapFilters.bhk !== "all") u.searchParams.set("bhk", mapFilters.bhk);
+    if (showHeatmap) u.searchParams.set("heat", "1");
+    if (insightsExpanded) u.searchParams.set("insights", "1");
     void navigator.clipboard.writeText(u.toString());
-  }, [viewport, mapFilters.bhk]);
+  }, [viewport, mapFilters.bhk, showHeatmap, insightsExpanded]);
 
   return (
     <div className="relative h-dvh w-full min-h-[100svh] overflow-hidden bg-black">
@@ -535,6 +606,8 @@ export function MapExplorer() {
           trendsPoints={trendsPoints}
           leaderboardRows={leaderboardRows}
           buildingClusters={buildingClusters}
+          expanded={insightsExpanded}
+          onExpandedChange={setInsightsExpanded}
         />
       </div>
 

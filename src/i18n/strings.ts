@@ -20,6 +20,8 @@ export const STRINGS: Record<
     entriesShort: "entries",
     insightsPanHint: "Pan the map — medians follow the center.",
     insightsEmpty: "Pan the map — we’ll summarize rents near the center.",
+    methodologyBlurb:
+      "How this works: we take pins in ~2.5 km around the map center, then compute median, range, and confidence from nearby same-BHK listings (see logic in rent-engine). The monthly trend uses move-in month when provided, otherwise submission month.",
     expandDetails: "Expand details",
     collapseDetails: "Collapse",
     mapFilters: "Map filters",
@@ -97,6 +99,8 @@ export const STRINGS: Record<
     entriesShort: "प्रविष्टियाँ",
     insightsPanHint: "मानचित्र घुमाएँ — केंद्र के अनुसार डेटा।",
     insightsEmpty: "मानचित्र घुमाएँ — हम केंद्र के पास किराया दिखाएँगे।",
+    methodologyBlurb:
+      "कैसे: मानचित्र केंद्र के ~2.5 किमी के पिन लेकर माध्यिका, रेंज और भरोसा निकालते हैं (विवरण rent-engine में)। महीने का ट्रेंड: अगर शिफ्ट महीना भरा है तो वही, नहीं तो सबमिट महीना।",
     expandDetails: "विस्तार दिखाएँ",
     collapseDetails: "संक्षिप्त करें",
     mapFilters: "मानचित्र फ़िल्टर",

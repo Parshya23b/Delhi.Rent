@@ -42,6 +42,9 @@ export function InsightsPanel({
   trendsPoints,
   leaderboardRows,
   buildingClusters,
+  expanded: expandedProp,
+  defaultExpanded = false,
+  onExpandedChange,
 }: {
   areaLabel: string;
   slice: RentEntry[];
@@ -55,10 +58,20 @@ export function InsightsPanel({
   trendsPoints: MonthPoint[];
   leaderboardRows: LocalityCount[];
   buildingClusters: BuildingCluster[];
+  /** Controlled expanded state (e.g. deep link `?insights=1`). */
+  expanded?: boolean;
+  defaultExpanded?: boolean;
+  onExpandedChange?: (open: boolean) => void;
 }) {
   const { t } = useLocale();
   const hasContributed = useRentStore((s) => s.hasContributed);
-  const [expanded, setExpanded] = useState(false);
+  const [uncontrolledExpanded, setUncontrolledExpanded] = useState(defaultExpanded);
+  const controlled = expandedProp !== undefined;
+  const expanded = controlled ? expandedProp : uncontrolledExpanded;
+  const setExpanded = (open: boolean) => {
+    if (!controlled) setUncontrolledExpanded(open);
+    onExpandedChange?.(open);
+  };
 
   const stats = useMemo(() => {
     if (slice.length === 0) return null;
@@ -84,7 +97,7 @@ export function InsightsPanel({
     >
       <button
         type="button"
-        onClick={() => setExpanded((e) => !e)}
+        onClick={() => setExpanded(!expanded)}
         className="flex w-full items-start gap-3 border-b border-white/10 px-4 py-3 text-left transition hover:bg-white/5 sm:items-center"
         aria-expanded={expanded}
       >
@@ -151,6 +164,10 @@ export function InsightsPanel({
               </div>
             ) : null}
           </div>
+
+          <p className="mb-3 text-[11px] leading-relaxed text-zinc-500">
+            {t("methodologyBlurb")}
+          </p>
 
           {hasContributed && stats ? (
             <>
