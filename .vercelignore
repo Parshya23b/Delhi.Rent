@@ -1,0 +1,4 @@
+# Do not upload local secrets with `vercel` CLI — set env vars in the Vercel dashboard instead.
+.env
+.env.local
+.env.*.local

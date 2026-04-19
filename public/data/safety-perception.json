@@ -1,0 +1,21 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "label": "Crowdsourced: higher perceived safety", "score": 4 },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [77.22, 28.55]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "label": "Mixed reports — verify locally", "score": 3 },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [77.35, 28.58]
+      }
+    }
+  ]
+}

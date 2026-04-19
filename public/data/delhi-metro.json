@@ -1,0 +1,37 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "Yellow Line", "color": "#f7c948" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[77.068, 28.465], [77.12, 28.48], [77.18, 28.52], [77.22, 28.55], [77.25, 28.58], [77.28, 28.62]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Blue Line", "color": "#3b82f6" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[77.02, 28.62], [77.08, 28.64], [77.15, 28.65], [77.22, 28.63], [77.28, 28.61]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Pink Line", "color": "#ec4899" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[77.05, 28.55], [77.1, 28.56], [77.18, 28.57], [77.25, 28.58], [77.32, 28.59]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Magenta Line", "color": "#a855f7" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[77.12, 28.52], [77.18, 28.54], [77.24, 28.56], [77.3, 28.58]]
+      }
+    }
+  ]
+}

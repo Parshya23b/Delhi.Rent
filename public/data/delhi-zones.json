@@ -1,0 +1,37 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "South Delhi" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[77.15, 28.45], [77.32, 28.45], [77.32, 28.62], [77.15, 28.62], [77.15, 28.45]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Gurgaon" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[76.95, 28.35], [77.12, 28.35], [77.12, 28.52], [76.95, 28.52], [76.95, 28.35]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Noida" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[77.28, 28.48], [77.45, 28.48], [77.45, 28.62], [77.28, 28.62], [77.28, 28.48]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Dwarka" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[76.98, 28.52], [77.12, 28.52], [77.12, 28.64], [76.98, 28.64], [76.98, 28.52]]]
+      }
+    }
+  ]
+}
