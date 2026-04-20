@@ -152,6 +152,10 @@ export function MapExplorer() {
     localityContributionCounts([], 20),
   );
 
+  const [insightsExpanded, setInsightsExpanded] = useState(
+    () => searchParams.get("insights") === "1",
+  );
+
   useEffect(() => {
     void fetch("/api/stats/leaderboard")
       .then((r) => r.json())
@@ -256,9 +260,6 @@ export function MapExplorer() {
 
   const mapInstanceRef = useRef<mapboxgl.Map | null>(null);
   const [howToOpen, setHowToOpen] = useState(false);
-  const [insightsExpanded, setInsightsExpanded] = useState(
-    () => searchParams.get("insights") === "1",
-  );
   const heatUrlInit = useRef(false);
   const [mapHeaderExpanded, setMapHeaderExpanded] = useState(true);
 

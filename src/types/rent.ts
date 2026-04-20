@@ -10,6 +10,13 @@ export type FurnishingType = (typeof FURNISHING_OPTIONS)[number];
 
 export type ConfidenceLevel = "high" | "medium" | "low";
 
+export const VERIFICATION_STATUSES = [
+  "unverified",
+  "self-reported",
+  "verified_document",
+] as const;
+export type VerificationStatus = (typeof VERIFICATION_STATUSES)[number];
+
 export interface RentEntry {
   id: string;
   lat: number;
@@ -26,6 +33,12 @@ export interface RentEntry {
   /** Female-hosted / women-only listing (self-reported; map filter). */
   women_only?: boolean;
   created_at: string;
+  /** Trust level shown as colored badge (grey/yellow/green). */
+  verification_status?: VerificationStatus;
+  /** Count of unique devices that confirmed this pin still accurate. */
+  confirmations_count?: number;
+  /** Bumps on author edit or user confirmation. */
+  last_updated?: string;
   /** Present when computed client-side or from API enrichment */
   confidence?: ConfidenceLevel;
   cluster_verified?: boolean;

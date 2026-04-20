@@ -1,4 +1,4 @@
-import type { RentEntry } from "@/types/rent";
+import type { RentEntry, VerificationStatus } from "@/types/rent";
 
 /** Delhi NCR center-ish */
 const SEED_POINTS: Array<{
@@ -63,6 +63,32 @@ export function generateDummyRents(): RentEntry[] {
         const dep = Math.round((rent * (2 + (h % 3))) / 500) * 500;
         const maint = h % 5 === 0 ? Math.round(rent * 0.08) : null;
         const womenOnly = (h % 100) < 28;
+        const createdAt = new Date(Date.now() - (h % 86400000) * 40).toISOString();
+
+        const verificationBucket = h % 10;
+        const verification_status: VerificationStatus =
+          verificationBucket < 2
+            ? "verified_document"
+            : verificationBucket < 7
+              ? "self-reported"
+              : "unverified";
+
+        const confirmations_count =
+          verification_status === "verified_document"
+            ? 5 + (h % 9)
+            : verification_status === "self-reported"
+              ? h % 6
+              : 0;
+
+        const daysSinceCreated = Math.floor(
+          (Date.now() - new Date(createdAt).getTime()) / 86400000,
+        );
+        const daysBack = Math.min(daysSinceCreated, (h % 28) + 1);
+        const last_updated =
+          confirmations_count > 0
+            ? new Date(Date.now() - daysBack * 86400000).toISOString()
+            : createdAt;
+
         out.push({
           id,
           lat: hub.lat + jitterLat,
@@ -82,7 +108,10 @@ export function generateDummyRents(): RentEntry[] {
           maintenance_inr: maint,
           deposit_inr: dep,
           opt_in_building_aggregate: h % 7 === 0,
-          created_at: new Date(Date.now() - (h % 86400000) * 40).toISOString(),
+          created_at: createdAt,
+          verification_status,
+          confirmations_count,
+          last_updated,
         });
       }
     }

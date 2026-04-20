@@ -1,3 +1,4 @@
+import { applyMemoryConfirmations } from "@/lib/confirmations-memory";
 import { generateDummyRents } from "@/lib/dummy-rents";
 import { normalizeRentRow } from "@/lib/rent-mapper";
 import { isPinExpired, PIN_MAX_AGE_MS } from "@/lib/rent-policy";
@@ -39,7 +40,8 @@ export async function loadRecentRentEntries(opts?: {
   const bbox = opts?.bbox ?? null;
   const dummy = generateDummyRents()
     .filter((r) => !isPinExpired(r.created_at))
-    .filter((r) => inBbox(r.lat, r.lng, bbox));
+    .filter((r) => inBbox(r.lat, r.lng, bbox))
+    .map(applyMemoryConfirmations);
   const rows: RentEntry[] = [...dummy];
 
   const supabase = getSupabaseService();

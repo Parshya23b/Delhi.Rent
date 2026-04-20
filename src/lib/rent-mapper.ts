@@ -1,6 +1,20 @@
-import type { RentEntry } from "@/types/rent";
+import type { RentEntry, VerificationStatus } from "@/types/rent";
+import { VERIFICATION_STATUSES } from "@/types/rent";
+
+function normalizeVerificationStatus(v: unknown): VerificationStatus {
+  const s = typeof v === "string" ? v : "";
+  return (VERIFICATION_STATUSES as readonly string[]).includes(s)
+    ? (s as VerificationStatus)
+    : "self-reported";
+}
 
 export function normalizeRentRow(r: Record<string, unknown>): RentEntry {
+  const createdAt = r.created_at != null ? String(r.created_at) : new Date().toISOString();
+  const lastUpdated = r.last_updated != null ? String(r.last_updated) : createdAt;
+  const confirmations =
+    r.confirmations_count != null && r.confirmations_count !== ""
+      ? Math.max(0, Math.round(Number(r.confirmations_count)))
+      : 0;
   return {
     id: String(r.id),
     lat: Number(r.lat),
@@ -21,6 +35,9 @@ export function normalizeRentRow(r: Record<string, unknown>): RentEntry {
         : null,
     opt_in_building_aggregate: Boolean(r.opt_in_building_aggregate),
     women_only: Boolean(r.women_only),
-    created_at: String(r.created_at),
+    created_at: createdAt,
+    verification_status: normalizeVerificationStatus(r.verification_status),
+    confirmations_count: confirmations,
+    last_updated: lastUpdated,
   };
 }

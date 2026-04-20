@@ -1,5 +1,7 @@
 import type { RentEntry } from "@/types/rent";
 import { avlbFromCount, isPinNew, rentShortLabel } from "@/lib/rent-supercluster";
+import { verificationDotColor } from "@/components/map/VerificationBadge";
+import { verificationTooltip } from "@/components/map/VerificationBadge";
 
 const BG = "#121214";
 const ORANGE = "#F59E0B";
@@ -74,8 +76,31 @@ export function createPointMarkerElement(
     "font-size:11px",
     "font-weight:700",
     "white-space:nowrap",
+    "position:relative",
   ].join(";");
   pill.textContent = line;
+
+  const status = entry.verification_status ?? "self-reported";
+  const dotColor = verificationDotColor(status);
+  const dot = document.createElement("span");
+  dot.style.cssText = [
+    "position:absolute",
+    "top:-3px",
+    "right:-3px",
+    "width:9px",
+    "height:9px",
+    "border-radius:9999px",
+    `background:${dotColor}`,
+    `box-shadow:0 0 0 2px ${BG}`,
+    "pointer-events:none",
+  ].join(";");
+  pill.appendChild(dot);
+
+  pill.title = verificationTooltip(
+    status,
+    entry.confirmations_count ?? 0,
+    entry.last_updated ?? entry.created_at,
+  );
   wrap.appendChild(pill);
 
   if (isNew) {

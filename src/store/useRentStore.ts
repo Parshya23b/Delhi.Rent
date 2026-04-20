@@ -18,6 +18,7 @@ interface RentState {
   entries: RentEntry[];
   setEntries: (e: RentEntry[]) => void;
   mergeEntries: (e: RentEntry[]) => void;
+  updateEntryFields: (id: string, patch: Partial<RentEntry>) => void;
   hasContributed: boolean;
   setHasContributed: (v: boolean) => void;
   lastSubmitted: RentEntry | null;
@@ -59,6 +60,12 @@ export const useRentStore = create<RentState>()(
           }
         }
         set({ entries: merged });
+      },
+      updateEntryFields: (id, patch) => {
+        const next = get().entries.map((e) =>
+          e.id === id ? { ...e, ...patch } : e,
+        );
+        set({ entries: next });
       },
       hasContributed: false,
       setHasContributed: (v) => set({ hasContributed: v }),

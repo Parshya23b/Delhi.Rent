@@ -268,6 +268,7 @@ export async function POST(req: Request) {
   }
 
   const localOnlyEntry = () => {
+    const nowIso = new Date().toISOString();
     const entry = {
       id: `local-${Date.now()}`,
       lat,
@@ -282,7 +283,10 @@ export async function POST(req: Request) {
       deposit_inr,
       opt_in_building_aggregate,
       women_only,
-      created_at: new Date().toISOString(),
+      created_at: nowIso,
+      verification_status: "self-reported" as const,
+      confirmations_count: 0,
+      last_updated: nowIso,
     };
     registerLocalEntryAuthor(entry.id, deviceIdRaw);
     recordSubmission(deviceHash);
