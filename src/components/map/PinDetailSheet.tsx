@@ -2,10 +2,10 @@
 
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { useLocale } from "@/components/i18n/LocaleProvider";
+import { ActionPanel } from "@/components/map/ActionPanel";
 import { VerificationBadge } from "@/components/map/VerificationBadge";
 import { getOrCreateDeviceId } from "@/lib/device-id";
 import { formatInr } from "@/lib/format";
-import { distanceKm } from "@/lib/geo";
 import { computeConfidence } from "@/lib/rent-engine";
 import { useRentStore } from "@/store/useRentStore";
 import type { RentEntry, VerificationStatus } from "@/types/rent";
@@ -18,8 +18,6 @@ function confidenceBadge(level: string) {
     return "bg-amber-500/20 text-amber-100 ring-amber-500/35";
   return "bg-rose-500/20 text-rose-100 ring-rose-500/35";
 }
-
-const NEARBY_KM = 1.8;
 
 function formatPinDate(iso: string): string {
   try {
@@ -48,6 +46,8 @@ export function PinDetailSheet({
 }) {
   const { t } = useLocale();
   const updateEntryFields = useRentStore((s) => s.updateEntryFields);
+  const setSelectedEntry = useRentStore((s) => s.setSelectedEntry);
+  const setMapFilters = useRentStore((s) => s.setMapFilters);
   const [reported, setReported] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [confirmMsg, setConfirmMsg] = useState<string | null>(null);
@@ -64,20 +64,6 @@ export function PinDetailSheet({
   const conf = useMemo(() => {
     if (!entry) return null;
     return computeConfidence(entry, allEntries);
-  }, [entry, allEntries]);
-
-  const recentNearby = useMemo(() => {
-    if (!entry) return [];
-    return allEntries
-      .filter((e) => {
-        if (e.id === entry.id) return false;
-        return distanceKm(entry.lat, entry.lng, e.lat, e.lng) <= NEARBY_KM;
-      })
-      .sort(
-        (a, b) =>
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-      )
-      .slice(0, 8);
   }, [entry, allEntries]);
 
   const report = async () => {
@@ -276,28 +262,15 @@ export function PinDetailSheet({
           </div>
         ) : null}
 
-        {recentNearby.length > 0 ? (
-          <div className="border-t border-white/10 pt-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
-              Most recent nearby
-            </p>
-            <ul className="mt-2 space-y-2 text-xs">
-              {recentNearby.map((e) => (
-                <li
-                  key={e.id}
-                  className="flex justify-between gap-2 text-zinc-300"
-                >
-                  <span>
-                    {formatInr(e.rent_inr)} · {e.bhk}
-                  </span>
-                  <span className="shrink-0 text-zinc-500">
-                    {formatPinDate(e.created_at)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
+        <ActionPanel
+          entry={entry}
+          allEntries={allEntries}
+          onSelectEntry={(e) => setSelectedEntry(e)}
+          onSeeCheaperNearby={({ bhk, rentMax }) => {
+            setMapFilters({ bhk, rentMax });
+            onClose();
+          }}
+        />
 
         <div className="flex items-center justify-between gap-2 pt-1">
           <button

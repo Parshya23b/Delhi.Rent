@@ -23,6 +23,27 @@ export const STRINGS: Record<
     confirmThanks: "Thanks — we bumped this pin’s confidence.",
     confirmAlready: "You already confirmed this pin.",
     confirmError: "Could not save your confirmation. Try again in a bit.",
+    actionPanelTitle: "What to do next",
+    savingsHeadline: "You could save ₹{amount}/mo by moving nearby.",
+    savingsBody:
+      "Similar {bhk} flats here go for around ₹{median} ({sample} nearby pins). This rent is {pct}% above that median.",
+    savingsAnnual: "≈ ₹{amount}/year if you move to a median-priced place.",
+    seeCheaperNearby: "See cheaper nearby",
+    brokerBypassHeadline: "Try finding direct owners in this area",
+    brokerBypassBody:
+      "Brokers typically add 1 month's rent as fee. Skipping them saves you ~8% for the year.",
+    brokerBypassTipsToggle: "How to find direct owners",
+    brokerTip1:
+      "Filter by Owner on NoBroker, MagicBricks, and Housing.com.",
+    brokerTip2:
+      "Join Facebook groups like “Delhi Flats Without Brokers” and local WhatsApp listings.",
+    brokerTip3:
+      "Walk the block — many societies still rely on gate-side 'To-Let' boards.",
+    nearbyListingsTitle: "Available {bhk} rentals nearby",
+    nearbyListingsCount: "{shown} of top {limit}",
+    ownerTag: "Owner",
+    metersShort: "m",
+    kmShort: "km",
     closePanel: "Close panel",
     quickActions: "Quick actions",
     medianShort: "Median",
@@ -111,6 +132,27 @@ export const STRINGS: Record<
     confirmThanks: "धन्यवाद — इस पिन का भरोसा बढ़ा दिया।",
     confirmAlready: "आप पहले ही पुष्टि कर चुके हैं।",
     confirmError: "पुष्टि सहेजी नहीं जा सकी। कुछ देर बाद फिर कोशिश करें।",
+    actionPanelTitle: "आगे क्या करें",
+    savingsHeadline: "पास में जाने पर आप हर महीने ₹{amount} बचा सकते हैं।",
+    savingsBody:
+      "यहाँ मिलते-जुलते {bhk} फ़्लैट लगभग ₹{median} में हैं ({sample} पास के पिन)। यह किराया उस मीडियन से {pct}% ज़्यादा है।",
+    savingsAnnual: "≈ साल में ₹{amount} की बचत, अगर आप मीडियन कीमत वाले फ़्लैट में जाएँ।",
+    seeCheaperNearby: "सस्ते विकल्प दिखाएँ",
+    brokerBypassHeadline: "इस इलाक़े में सीधे मालिक ढूँढें",
+    brokerBypassBody:
+      "ब्रोकर आम तौर पर एक महीने का किराया फ़ीस लेते हैं। उन्हें टालें तो साल भर में ~8% बचत।",
+    brokerBypassTipsToggle: "सीधे मालिक कैसे ढूँढें",
+    brokerTip1:
+      "NoBroker, MagicBricks, Housing.com पर ‘Owner’ फ़िल्टर लगाएँ।",
+    brokerTip2:
+      "‘Delhi Flats Without Brokers’ जैसे Facebook ग्रुप व स्थानीय WhatsApp सूचियाँ देखें।",
+    brokerTip3:
+      "इलाक़े में घूमें — कई सोसाइटियाँ गेट पर ‘To-Let’ बोर्ड लगाती हैं।",
+    nearbyListingsTitle: "पास में उपलब्ध {bhk} किराये",
+    nearbyListingsCount: "टॉप {limit} में से {shown}",
+    ownerTag: "मालिक",
+    metersShort: "मी",
+    kmShort: "कि.मी.",
     closePanel: "पैनल बंद करें",
     quickActions: "त्वरित क्रियाएँ",
     medianShort: "माध्यिका",
