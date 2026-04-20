@@ -36,6 +36,7 @@ import {
 import { useRentStore } from "@/store/useRentStore";
 import type { RentEntry } from "@/types/rent";
 import type { FeatureCollection, MultiPolygon, Polygon } from "geojson";
+import clsx from "clsx";
 import Link from "next/link";
 import mapboxgl from "mapbox-gl";
 import { useSearchParams } from "next/navigation";
@@ -52,6 +53,27 @@ const CYBER_CITY = { lng: 77.0884, lat: 28.4942 };
 
 function hasPublicMapboxToken(): boolean {
   return Boolean(process.env.NEXT_PUBLIC_MAPBOX_TOKEN);
+}
+
+function IconChevronNav({ up, className }: { up: boolean; className?: string }) {
+  return (
+    <svg
+      className={clsx(className, "transition-transform duration-200", up && "-scale-y-100")}
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden
+    >
+      <path
+        d="M6 9l6 6 6-6"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }
 
 export function MapExplorer() {
@@ -238,6 +260,11 @@ export function MapExplorer() {
     () => searchParams.get("insights") === "1",
   );
   const heatUrlInit = useRef(false);
+  const [mapHeaderExpanded, setMapHeaderExpanded] = useState(true);
+
+  const toggleMapHeader = useCallback(() => {
+    setMapHeaderExpanded((prev) => !prev);
+  }, []);
 
   const vpLat = viewport?.lat;
   const vpLng = viewport?.lng;
@@ -487,11 +514,11 @@ export function MapExplorer() {
 
       <header className="pointer-events-none absolute inset-x-0 top-0 z-30 px-3 pt-[max(0.5rem,env(safe-area-inset-top))] sm:px-4">
         <div className="pointer-events-auto flex flex-col gap-2.5 rounded-2xl border border-white/15 bg-slate-900/65 p-3 shadow-2xl shadow-black/20 backdrop-blur-xl dark:bg-[#0a0f18]/75">
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <button
               type="button"
               onClick={() => setSidePanelOpen(true)}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/15 bg-white/10 text-white transition hover:bg-white/15 active:scale-[0.98]"
+              className="flex h-11 min-h-[44px] min-w-[44px] shrink-0 touch-manipulation items-center justify-center rounded-xl border border-white/15 bg-white/10 text-white transition hover:bg-white/15 active:scale-[0.98]"
               aria-expanded={sidePanelOpen}
               aria-controls="map-side-panel"
               title={t("mapAndSaved")}
@@ -519,7 +546,7 @@ export function MapExplorer() {
               </span>
             </Link>
 
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 basis-[min(100%,10rem)] sm:min-w-[200px]">
               <MapSearchBar
                 onPick={(r) => {
                   setFlyTo({
@@ -531,18 +558,32 @@ export function MapExplorer() {
               />
             </div>
 
-            <div className="hidden shrink-0 items-center gap-1.5 sm:flex">
+            <button
+              type="button"
+              onClick={toggleMapHeader}
+              aria-expanded={mapHeaderExpanded}
+              aria-controls="map-header-collapsible"
+              title={mapHeaderExpanded ? t("mapHeaderCollapse") : t("mapHeaderExpand")}
+              className="flex h-11 min-h-[44px] min-w-[44px] shrink-0 touch-manipulation items-center justify-center rounded-xl border border-white/15 bg-white/10 text-zinc-200 transition hover:bg-white/15 active:scale-[0.98]"
+            >
+              <span className="sr-only">
+                {mapHeaderExpanded ? t("mapHeaderCollapse") : t("mapHeaderExpand")}
+              </span>
+              <IconChevronNav up={mapHeaderExpanded} className="text-teal-300" />
+            </button>
+
+            <div className="flex shrink-0 items-center gap-1.5">
               <div className="flex rounded-lg border border-white/10 bg-white/5 p-0.5">
                 <button
                   type="button"
-                  className={`rounded-md px-2 py-1 text-[11px] font-semibold ${locale === "en" ? "bg-teal-600/40 text-white" : "text-zinc-400 hover:text-white"}`}
+                  className={`touch-manipulation rounded-md px-2 py-1.5 text-[11px] font-semibold sm:py-1 ${locale === "en" ? "bg-teal-600/40 text-white" : "text-zinc-400 hover:text-white"}`}
                   onClick={() => setLocale("en")}
                 >
                   EN
                 </button>
                 <button
                   type="button"
-                  className={`rounded-md px-2 py-1 text-[11px] font-semibold ${locale === "hi" ? "bg-teal-600/40 text-white" : "text-zinc-400 hover:text-white"}`}
+                  className={`touch-manipulation rounded-md px-2 py-1.5 text-[11px] font-semibold sm:py-1 ${locale === "hi" ? "bg-teal-600/40 text-white" : "text-zinc-400 hover:text-white"}`}
                   onClick={() => setLocale("hi")}
                 >
                   हि
@@ -552,38 +593,23 @@ export function MapExplorer() {
             </div>
           </div>
 
-          <MapStatusStrip
-            entryCount={filteredEntries.length}
-            totalRentInr={totalRentPinned}
-            onLiveStats={() => {
-              document
-                .getElementById("map-insights-dock")
-                ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-            }}
-          />
+          <div
+            id="map-header-collapsible"
+            className={mapHeaderExpanded ? "flex flex-col gap-2.5" : "hidden"}
+          >
+            <MapStatusStrip
+              entryCount={filteredEntries.length}
+              totalRentInr={totalRentPinned}
+              onLiveStats={() => {
+                document
+                  .getElementById("map-insights-dock")
+                  ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+              }}
+            />
 
-          <div className="flex justify-end gap-2 sm:hidden">
-            <div className="flex rounded-lg border border-white/10 bg-white/5 p-0.5">
-              <button
-                type="button"
-                className={`rounded-md px-2 py-1 text-[11px] font-semibold ${locale === "en" ? "bg-teal-600/40 text-white" : "text-zinc-400"}`}
-                onClick={() => setLocale("en")}
-              >
-                EN
-              </button>
-              <button
-                type="button"
-                className={`rounded-md px-2 py-1 text-[11px] font-semibold ${locale === "hi" ? "bg-teal-600/40 text-white" : "text-zinc-400"}`}
-                onClick={() => setLocale("hi")}
-              >
-                हि
-              </button>
+            <div className="-mx-0.5 overflow-x-auto px-0.5 pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <MapFiltersBar value={mapFilters} onChange={setMapFilters} />
             </div>
-            <ThemeToggle />
-          </div>
-
-          <div className="-mx-0.5 overflow-x-auto px-0.5 pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <MapFiltersBar value={mapFilters} onChange={setMapFilters} />
           </div>
         </div>
       </header>
