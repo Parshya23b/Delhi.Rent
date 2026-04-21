@@ -262,10 +262,32 @@ export function MapExplorer() {
   const [howToOpen, setHowToOpen] = useState(false);
   const heatUrlInit = useRef(false);
   const [mapHeaderExpanded, setMapHeaderExpanded] = useState(true);
+  const headerRef = useRef<HTMLElement | null>(null);
 
   const toggleMapHeader = useCallback(() => {
     setMapHeaderExpanded((prev) => !prev);
   }, []);
+
+  useEffect(() => {
+    if (!mapHeaderExpanded) return;
+    const onPointerDown = (ev: PointerEvent) => {
+      const target = ev.target as Node | null;
+      if (!target || !headerRef.current) return;
+      if (headerRef.current.contains(target)) return;
+      setMapHeaderExpanded(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [mapHeaderExpanded]);
+
+  useEffect(() => {
+    if (!mapHeaderExpanded) return;
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") setMapHeaderExpanded(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [mapHeaderExpanded]);
 
   const vpLat = viewport?.lat;
   const vpLng = viewport?.lng;
@@ -513,9 +535,12 @@ export function MapExplorer() {
         canSaveCenter={Boolean(viewport)}
       />
 
-      <header className="pointer-events-none absolute inset-x-0 top-0 z-30 px-3 pt-[max(0.5rem,env(safe-area-inset-top))] sm:px-4">
-        <div className="pointer-events-auto flex flex-col gap-2.5 rounded-2xl border border-white/15 bg-slate-900/65 p-3 shadow-2xl shadow-black/20 backdrop-blur-xl dark:bg-[#0a0f18]/75">
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+      <header
+        ref={headerRef}
+        className="pointer-events-none absolute inset-x-0 top-0 z-30 px-3 pt-[max(0.5rem,env(safe-area-inset-top))] sm:px-4"
+      >
+        <div className="pointer-events-auto flex flex-col gap-2.5 rounded-2xl border border-white/15 bg-slate-900/65 p-2.5 shadow-2xl shadow-black/20 backdrop-blur-xl sm:p-3 dark:bg-[#0a0f18]/75">
+          <div className="flex flex-nowrap items-center gap-2 sm:gap-3">
             <button
               type="button"
               onClick={() => setSidePanelOpen(true)}
@@ -547,7 +572,7 @@ export function MapExplorer() {
               </span>
             </Link>
 
-            <div className="min-w-0 flex-1 basis-[min(100%,10rem)] sm:min-w-[200px]">
+            <div className="min-w-0 flex-1 sm:min-w-[200px]">
               <MapSearchBar
                 onPick={(r) => {
                   setFlyTo({
@@ -573,7 +598,7 @@ export function MapExplorer() {
               <IconChevronNav up={mapHeaderExpanded} className="text-teal-300" />
             </button>
 
-            <div className="flex shrink-0 items-center gap-1.5">
+            <div className="hidden shrink-0 items-center gap-1.5 sm:flex">
               <div className="flex rounded-lg border border-white/10 bg-white/5 p-0.5">
                 <button
                   type="button"
@@ -598,6 +623,36 @@ export function MapExplorer() {
             id="map-header-collapsible"
             className={mapHeaderExpanded ? "flex flex-col gap-2.5" : "hidden"}
           >
+            <div className="flex items-center justify-between gap-2 sm:hidden">
+              <Link href="/" className="flex flex-col leading-tight">
+                <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-teal-400">
+                  {t("brand")}
+                </span>
+                <span className="truncate text-[10px] text-zinc-400">
+                  {t("tagline")}
+                </span>
+              </Link>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <div className="flex rounded-lg border border-white/10 bg-white/5 p-0.5">
+                  <button
+                    type="button"
+                    className={`touch-manipulation rounded-md px-2 py-1 text-[11px] font-semibold ${locale === "en" ? "bg-teal-600/40 text-white" : "text-zinc-400 hover:text-white"}`}
+                    onClick={() => setLocale("en")}
+                  >
+                    EN
+                  </button>
+                  <button
+                    type="button"
+                    className={`touch-manipulation rounded-md px-2 py-1 text-[11px] font-semibold ${locale === "hi" ? "bg-teal-600/40 text-white" : "text-zinc-400 hover:text-white"}`}
+                    onClick={() => setLocale("hi")}
+                  >
+                    हि
+                  </button>
+                </div>
+                <ThemeToggle />
+              </div>
+            </div>
+
             <MapStatusStrip
               entryCount={filteredEntries.length}
               totalRentInr={totalRentPinned}
