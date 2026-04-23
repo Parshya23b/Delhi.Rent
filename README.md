@@ -1,6 +1,6 @@
 # delhi.rent
 
-Anonymous rent pins for Delhi NCR (Next.js App Router, Mapbox, optional Supabase).
+Anonymous rent pins for Delhi NCR (Next.js App Router, Mapbox, Supabase).
 
 ## Local development
 
