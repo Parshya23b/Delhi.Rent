@@ -518,6 +518,12 @@ export function MapExplorer() {
             primaryHint={t("ctaAddRentHint")}
             seekerLabel={t("ctaSeeker")}
             seekerHint={t("ctaSeekerHint")}
+            dockTitle={t("bottomDockTitle")}
+            sectionAddRentTitle={t("bottomDockAddRentSection")}
+            sectionSeekerTitle={t("bottomDockSeekerSection")}
+            expandDockAria={t("bottomDockExpandAria")}
+            collapseDockAria={t("bottomDockCollapseAria")}
+            howToLabel={t("howToUse")}
             onHowTo={() => setHowToOpen(true)}
             builtBy="delhi.rent"
           />
