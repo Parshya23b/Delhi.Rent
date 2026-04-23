@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:apply:seeker": "node scripts/apply-sql-file.mjs supabase/migrations/007_seeker_pins.sql"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.103.3",
@@ -22,6 +23,7 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "pg": "^8.14.1",
     "@tailwindcss/postcss": "^4",
     "@types/geojson": "^7946.0.16",
     "@types/mapbox-gl": "^3.4.1",
