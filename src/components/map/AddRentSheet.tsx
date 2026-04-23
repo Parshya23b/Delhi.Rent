@@ -10,7 +10,12 @@ import {
   overpayPercent,
 } from "@/lib/rent-engine";
 import { useRentStore } from "@/store/useRentStore";
-import { BHK_OPTIONS, FURNISHING_OPTIONS, type RentEntry } from "@/types/rent";
+import {
+  BHK_OPTIONS,
+  FURNISHING_OPTIONS,
+  bhkLabelToCode,
+  type RentEntry,
+} from "@/types/rent";
 import clsx from "clsx";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -225,6 +230,7 @@ export function AddRentSheet({
   const { t } = useLocale();
   const mergeEntries = useRentStore((s) => s.mergeEntries);
   const setHasContributed = useRentStore((s) => s.setHasContributed);
+  const setLastSubmitted = useRentStore((s) => s.setLastSubmitted);
 
   const [rent, setRent] = useState("");
   const [bhk, setBhk] = useState<string>("2BHK");
@@ -321,29 +327,48 @@ export function AddRentSheet({
       return;
     }
 
+    const bhkCode = bhkLabelToCode(bhk);
+    if (bhkCode == null) {
+      setFieldErrors({ bhk: "Choose a BHK type." });
+      return;
+    }
+
+    const latNum = Number(draft.lat);
+    const lngNum = Number(draft.lng);
+    if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) {
+      setFieldErrors({ general: "Invalid map location. Tap the map again to place the pin." });
+      return;
+    }
+
     setLoading(true);
     try {
       const deviceId = getOrCreateDeviceId();
+
+      const payload: Record<string, unknown> = {
+        lat: latNum,
+        lng: lngNum,
+        rent: Math.round(rentNum),
+        bhk: bhkCode,
+        opt_in_building_aggregate: optInBuilding,
+        women_only: womenOnly,
+      };
+      const areaTrim = area.trim();
+      if (areaTrim) payload.area_label = areaTrim;
+      if (moveIn) payload.move_in_month = moveIn;
+      const brokerTrim = broker.trim();
+      if (brokerTrim) payload.broker_or_owner = brokerTrim;
+      const furnishingTrim = furnishing.trim();
+      if (furnishingTrim) payload.furnishing = furnishingTrim;
+      if (maintenanceNum != null) payload.maintenance_inr = maintenanceNum;
+      if (depositNum != null) payload.deposit_inr = depositNum;
+
       const res = await fetch("/api/rents", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "X-Device-Id": deviceId,
         },
-        body: JSON.stringify({
-          lat: draft.lat,
-          lng: draft.lng,
-          rent_inr: rentNum,
-          bhk,
-          area_label: area || null,
-          move_in_month: moveIn || null,
-          broker_or_owner: broker || null,
-          furnishing: furnishing || null,
-          maintenance_inr: maintenanceNum,
-          deposit_inr: depositNum,
-          opt_in_building_aggregate: optInBuilding,
-          women_only: womenOnly,
-        }),
+        body: JSON.stringify(payload),
       });
       const data = (await res.json()) as {
         error?: string;
@@ -365,6 +390,7 @@ export function AddRentSheet({
       const entry = data.entry as RentEntry;
       mergeEntries([entry]);
       setHasContributed(true);
+      setLastSubmitted(entry);
 
       const near = entriesNearPoint(draft.lat, draft.lng, [...allEntries, entry], 2.5, bhk);
       const stats = computeAreaStats(near, area || "This area");

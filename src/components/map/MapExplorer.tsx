@@ -12,6 +12,7 @@ import {
   MapFloatingStack,
   MapStatusStrip,
 } from "@/components/map/MapUiChrome";
+import { ClusterFlatsSheet } from "@/components/map/ClusterFlatsSheet";
 import { MapView } from "@/components/map/MapView";
 import { NearbyRentList } from "@/components/map/NearbyRentList";
 import { OverpayBanner } from "@/components/map/OverpayBanner";
@@ -28,7 +29,11 @@ import {
   WATCHLIST_SERVER_SNAPSHOT,
 } from "@/lib/watchlist-storage";
 import { localityContributionCounts } from "@/lib/locality-leaderboard";
-import { medianRentByMonth } from "@/lib/rent-trends";
+import {
+  medianRentByMonth,
+  monthPointsFromHistoryRows,
+  type MonthPoint,
+} from "@/lib/rent-trends";
 import { bboxFromCenterZoom } from "@/lib/viewport-bbox";
 import {
   computeAreaStats,
@@ -123,6 +128,14 @@ export function MapExplorer() {
   const [pinOpen, setPinOpen] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<RentEntry | null>(null);
 
+  const [clusterSheet, setClusterSheet] = useState<{
+    entries: RentEntry[];
+    lat: number;
+    lng: number;
+    clusterPointCount: number;
+    truncated: boolean;
+  } | null>(null);
+
   const [overpay, setOverpay] = useState<{
     open: boolean;
     userRent: number;
@@ -157,11 +170,13 @@ export function MapExplorer() {
     () => searchParams.get("insights") === "1",
   );
 
+  const [historyTrends, setHistoryTrends] = useState<MonthPoint[] | null>(null);
+
   useEffect(() => {
     void fetch("/api/stats/leaderboard")
       .then((r) => r.json())
       .then((d: { leaderboard?: { locality: string; count: number }[] }) => {
-        if (d.leaderboard?.length) setLeaderboardRows(d.leaderboard);
+        setLeaderboardRows(d.leaderboard ?? []);
       })
       .catch(() => {});
   }, [entries.length]);
@@ -317,10 +332,51 @@ export function MapExplorer() {
     );
   }, [focusForInsights, filteredEntries]);
 
-  const trendsPoints = useMemo(
-    () => medianRentByMonth(insightSlice, 12),
-    [insightSlice],
-  );
+  useEffect(() => {
+    if (!viewport) return;
+    let cancelled = false;
+    const ctrl = new AbortController();
+    const months = 24;
+    const b = bboxFromCenterZoom(viewport.lat, viewport.lng, viewport.zoom);
+    const q = new URLSearchParams({
+      minLat: String(b.minLat),
+      maxLat: String(b.maxLat),
+      minLng: String(b.minLng),
+      maxLng: String(b.maxLng),
+      months: String(months),
+    });
+    if (mapFilters.bhk !== "all") q.set("bhk", mapFilters.bhk);
+    const t = window.setTimeout(() => {
+      void fetch(`/api/stats/rent-history?${q}`, { signal: ctrl.signal })
+        .then((r) => r.json())
+        .then(
+          (d: {
+            series?: { month_key: string; median_rent: number; pin_count: number }[];
+          }) => {
+            if (cancelled) return;
+            const raw = d.series ?? [];
+            if (!raw.length) {
+              setHistoryTrends(null);
+              return;
+            }
+            setHistoryTrends(monthPointsFromHistoryRows(raw, months));
+          },
+        )
+        .catch(() => {
+          if (!cancelled) setHistoryTrends(null);
+        });
+    }, 450);
+    return () => {
+      cancelled = true;
+      ctrl.abort();
+      window.clearTimeout(t);
+    };
+  }, [viewport, mapFilters.bhk, entries.length]);
+
+  const trendsPoints = useMemo(() => {
+    if (viewport && historyTrends?.length) return historyTrends;
+    return medianRentByMonth(insightSlice, 12);
+  }, [viewport, historyTrends, insightSlice]);
 
   const buildingClusters = useMemo(
     () => computeBuildingClusters(insightSlice),
@@ -336,6 +392,16 @@ export function MapExplorer() {
     () => new Map(filteredEntries.map((e) => [e.id, e] as const)),
     [filteredEntries],
   );
+
+  const openLiveStatsDock = useCallback(() => {
+    setInsightsExpanded(true);
+    setMapHeaderExpanded(false);
+    requestAnimationFrame(() => {
+      document
+        .getElementById("map-insights-dock")
+        ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  }, []);
 
   const onMapClickEmpty = useCallback((lat: number, lng: number) => {
     setSelectedEntry(null);
@@ -353,6 +419,23 @@ export function MapExplorer() {
     setPinOpen(true);
   }, []);
 
+  const onClusterSelect = useCallback(
+    (payload: {
+      entries: RentEntry[];
+      lat: number;
+      lng: number;
+      clusterPointCount: number;
+      truncated: boolean;
+    }) => {
+      setAddOpen(false);
+      setAddDraft(null);
+      setPinOpen(false);
+      setSelectedEntry(null);
+      setClusterSheet(payload);
+    },
+    [],
+  );
+
   const onSubmitted = useCallback(
     (_entry: RentEntry, o: { pct: number; median: number }) => {
       // Match filters to this listing so the new pill marker is not hidden (BHK/rent/women-only, etc.).
@@ -369,14 +452,19 @@ export function MapExplorer() {
         lat: _entry.lat,
         zoom: 15,
       });
+      setSelectedEntry(_entry);
+      setPinOpen(true);
       setOverpay({
         open: true,
         userRent: _entry.rent_inr,
         median: o.median,
         pct: o.pct,
       });
+      window.setTimeout(() => {
+        openLiveStatsDock();
+      }, 400);
     },
-    [setMapFilters],
+    [setMapFilters, openLiveStatsDock],
   );
 
   const openAddFromCenter = () => {
@@ -462,16 +550,6 @@ export function MapExplorer() {
     void navigator.clipboard.writeText(u.toString());
   }, [viewport, mapFilters.bhk, showHeatmap, insightsExpanded]);
 
-  const openLiveStatsDock = useCallback(() => {
-    setInsightsExpanded(true);
-    setMapHeaderExpanded(false);
-    requestAnimationFrame(() => {
-      document
-        .getElementById("map-insights-dock")
-        ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    });
-  }, []);
-
   return (
     <div className="relative h-dvh w-full min-h-[100svh] overflow-hidden bg-black">
       {!showListFallback ? (
@@ -482,6 +560,7 @@ export function MapExplorer() {
               entryById={entryById}
               onMapClickEmpty={onMapClickEmpty}
               onSelectEntry={onSelectEntry}
+              onClusterSelect={onClusterSelect}
               onViewportChange={setViewport}
               flyToUserOnLoad={flyToUserOnLoad && !initialView}
               initialView={initialView}
@@ -614,6 +693,17 @@ export function MapExplorer() {
                     lat: r.lat,
                     zoom: r.kind === "rent_pin" ? 15 : 13.5,
                   });
+                  if (r.kind === "rent_pin" && (r.entry ?? r.id)) {
+                    const hit =
+                      r.entry ??
+                      useRentStore.getState().entries.find((e) => e.id === r.id);
+                    if (hit) {
+                      if (r.entry) mergeEntries([r.entry]);
+                      setAddOpen(false);
+                      setSelectedEntry(hit);
+                      setPinOpen(true);
+                    }
+                  }
                 }}
               />
             </div>
@@ -746,7 +836,7 @@ export function MapExplorer() {
             <ul className="mt-3 list-inside list-disc space-y-2 text-sm text-zinc-300">
               <li>Tap the map to drop an anonymous rent pin.</li>
               <li>Use search to jump to a place or find pins by area name.</li>
-              <li>Pill markers show clusters — tap to zoom in.</li>
+              <li>Pill markers show clusters — tap to list every pin there (and zoom in).</li>
               <li>Orange pins with “ROOM AVAIL” highlight women-only listings.</li>
             </ul>
             <button
@@ -790,6 +880,20 @@ export function MapExplorer() {
         }}
         entry={selectedEntry}
         allEntries={entries}
+      />
+
+      <ClusterFlatsSheet
+        open={Boolean(clusterSheet)}
+        onClose={() => setClusterSheet(null)}
+        entries={clusterSheet?.entries ?? []}
+        centerLat={clusterSheet?.lat ?? 28.55}
+        centerLng={clusterSheet?.lng ?? 77.2}
+        clusterPointCount={clusterSheet?.clusterPointCount ?? 0}
+        truncated={clusterSheet?.truncated ?? false}
+        onPickEntry={(e) => {
+          setClusterSheet(null);
+          onSelectEntry(e);
+        }}
       />
 
       <OverpayBanner

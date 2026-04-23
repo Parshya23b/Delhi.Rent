@@ -3,6 +3,31 @@ import type { RentEntry } from "@/types/rent";
 
 export type MonthPoint = { key: string; label: string; median: number; count: number };
 
+/** Row shape from `rent_history_monthly_medians` RPC. */
+export type HistoryMonthRow = {
+  month_key: string;
+  median_rent: number;
+  pin_count: number;
+};
+
+/** Map DB monthly aggregates to chart points (caps trailing months). */
+export function monthPointsFromHistoryRows(
+  rows: HistoryMonthRow[],
+  maxMonths = 24,
+): MonthPoint[] {
+  const sorted = [...rows].sort((a, b) => a.month_key.localeCompare(b.month_key));
+  const tail = sorted.slice(-maxMonths);
+  return tail.map((r) => {
+    const [y, m] = r.month_key.split("-");
+    return {
+      key: r.month_key,
+      label: `${m}/${(y ?? "").slice(2)}`,
+      median: Math.round(Number(r.median_rent)),
+      count: Number(r.pin_count),
+    };
+  });
+}
+
 function monthKeyForEntry(e: RentEntry): string | null {
   const move = e.move_in_month?.trim();
   if (move && /^\d{4}-\d{2}$/.test(move)) return move;

@@ -78,7 +78,7 @@ export const STRINGS: Record<
     expandDetails: "Expand details",
     collapseDetails: "Collapse",
     mapFilters: "Map filters",
-    searchPlace: "Search place",
+    searchPlace: "Search place, area, BHK, or rent",
     last12m: "Last 12 months only",
     compareAreas: "Compare areas",
     watchlist: "Saved areas",
@@ -93,6 +93,9 @@ export const STRINGS: Record<
     futureEmail:
       "Weekly alerts: coming later (optional email — we stay anonymous-first).",
     listFallbackTitle: "Nearby rents (map unavailable)",
+    clusterFlatsTitle: "{count} flats here",
+    clusterFlatsHint: "Tap a listing for full details.",
+    clusterFlatsTruncated: "Showing {shown} of {total} in this cluster — zoom in for smaller groups.",
     copyMapLink: "Copy map link",
     womenOnlyFilter: "Women-only spaces",
     womenOnlyBlurb:
@@ -274,7 +277,7 @@ export const STRINGS: Record<
     expandDetails: "विस्तार दिखाएँ",
     collapseDetails: "संक्षिप्त करें",
     mapFilters: "मानचित्र फ़िल्टर",
-    searchPlace: "जगह खोजें",
+    searchPlace: "जगह, इलाका, BHK या किराया खोजें",
     last12m: "पिछले 12 महीने",
     compareAreas: "दो इलाकों की तुलना",
     watchlist: "सहेजे गए इलाके",
@@ -289,6 +292,10 @@ export const STRINGS: Record<
     futureEmail:
       "साप्ताहिक अलर्ट: बाद में (ईमेल वैकल्पिक — गुमनाम पहले)।",
     listFallbackTitle: "पास का किराया (मानचित्र उपलब्ध नहीं)",
+    clusterFlatsTitle: "यहाँ {count} फ़्लैट",
+    clusterFlatsHint: "पूरी जानकारी के लिए कोई सूची टैप करें।",
+    clusterFlatsTruncated:
+      "इस क्लस्टर में {shown} / {total} दिख रहे हैं — छोटे समूह के लिए ज़ूम करें।",
     copyMapLink: "मानचित्र लिंक कॉपी करें",
     womenOnlyFilter: "केवल महिलाओं के लिए",
     womenOnlyBlurb:

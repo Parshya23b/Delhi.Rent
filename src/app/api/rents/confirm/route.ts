@@ -6,6 +6,7 @@ import {
   ipAllowed,
 } from "@/lib/confirmations-memory";
 import { normalizeRentRow } from "@/lib/rent-mapper";
+import { RENT_ENTRIES_EXPANDED } from "@/lib/rent-table";
 import { getSupabaseService } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
@@ -84,8 +85,8 @@ export async function POST(req: Request) {
   }
 
   const { data: entry, error: fetchErr } = await supabase
-    .from("rent_entries")
-    .select("id, device_id_hash, verification_status, confirmations_count, last_updated")
+    .from(RENT_ENTRIES_EXPANDED)
+    .select("id, device_id_hash")
     .eq("id", entryId)
     .maybeSingle();
 
@@ -100,59 +101,44 @@ export async function POST(req: Request) {
     );
   }
 
-  const insertRes = await supabase
-    .from("rent_confirmations")
-    .insert({
-      entry_id: entryId,
-      confirmer_device_hash: deviceHash,
-      confirmer_ip_hash: ipHash,
-    })
-    .select()
-    .maybeSingle();
-
-  const insErr = insertRes.error as
-    | { code?: string; message?: string }
-    | null;
+  const { error: insErr } = await supabase.from("verification_logs").insert({
+    rent_entry_id: entryId,
+    action: "confirmed",
+    user_id: deviceHash,
+  });
 
   if (insErr) {
     const code = insErr.code ?? "";
     const msg = insErr.message?.toLowerCase() ?? "";
-
-    if (code === "23505") {
+    if (code === "23505" || msg.includes("unique") || msg.includes("duplicate")) {
       const fresh = await supabase
-        .from("rent_entries")
-        .select("verification_status, confirmations_count, last_updated")
+        .from(RENT_ENTRIES_EXPANDED)
+        .select("*")
         .eq("id", entryId)
         .maybeSingle();
-      const data = fresh.data as {
-        verification_status?: string;
-        confirmations_count?: number;
-        last_updated?: string;
-      } | null;
+      const data = fresh.data as Record<string, unknown> | null;
+      const normalized = data ? normalizeRentRow(data) : null;
       const res: ConfirmResponse = {
         ok: true,
         alreadyConfirmed: true,
-        confirmations_count: Number(data?.confirmations_count ?? 0),
-        verification_status: data?.verification_status ?? "self-reported",
-        last_updated: data?.last_updated ?? new Date().toISOString(),
+        confirmations_count: normalized?.confirmations_count ?? 0,
+        verification_status: normalized?.verification_status ?? "self-reported",
+        last_updated: normalized?.last_updated ?? new Date().toISOString(),
         entry_id: entryId,
       };
       return NextResponse.json(res);
     }
 
-    if (msg.includes("rent_confirmations") || code === "42P01") {
+    if (msg.includes("verification_logs") || code === "42P01") {
       console.warn(
-        "[confirm] rent_confirmations table missing — run migration 006. Falling back to memory.",
+        "[confirm] verification_logs missing — run migration 009. Falling back to memory.",
       );
       const mem = confirmPinMemory(entryId, deviceHash);
-      const status =
-        (entry.verification_status as string | null) ?? "self-reported";
-      const baseCount = Number(entry.confirmations_count ?? 0);
       const res: ConfirmResponse = {
         ok: true,
         alreadyConfirmed: mem.alreadyConfirmed,
-        confirmations_count: baseCount + mem.confirmations_count,
-        verification_status: status,
+        confirmations_count: mem.confirmations_count,
+        verification_status: "self-reported",
         last_updated: mem.last_updated,
         entry_id: entryId,
       };
@@ -167,21 +153,21 @@ export async function POST(req: Request) {
   }
 
   const fresh = await supabase
-    .from("rent_entries")
+    .from(RENT_ENTRIES_EXPANDED)
     .select("*")
     .eq("id", entryId)
     .maybeSingle();
 
   if (fresh.error || !fresh.data) {
-    return NextResponse.json({
+    const res: ConfirmResponse = {
       ok: true,
       alreadyConfirmed: false,
-      confirmations_count: Number(entry.confirmations_count ?? 0) + 1,
-      verification_status:
-        (entry.verification_status as string | null) ?? "self-reported",
+      confirmations_count: 1,
+      verification_status: "self-reported",
       last_updated: new Date().toISOString(),
       entry_id: entryId,
-    });
+    };
+    return NextResponse.json(res);
   }
 
   const normalized = normalizeRentRow(fresh.data as Record<string, unknown>);

@@ -15,15 +15,41 @@ import {
   validateRentAgainstRegionalMedian,
 } from "@/lib/nearby-rents-for-median";
 import { normalizeRentRow } from "@/lib/rent-mapper";
+import { RENT_ENTRIES_EXPANDED } from "@/lib/rent-table";
 import { SUBMISSION_COOLDOWN_MS } from "@/lib/rent-policy";
-import { getSupabaseService } from "@/lib/supabase/service";
+import { getSupabaseRead, getSupabaseService } from "@/lib/supabase/service";
 import {
   checkCooldownMemory,
   recordSubmission,
 } from "@/lib/submission-cooldown";
-import { BHK_OPTIONS } from "@/types/rent";
+import { BHK_OPTIONS, bhkCodeToLabel } from "@/types/rent";
 
 export const dynamic = "force-dynamic";
+
+function parseOptionalNumber(v: unknown): number | null {
+  if (v == null || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.round(n) : null;
+}
+
+function parseRequiredFiniteNumber(v: unknown): number {
+  if (v == null || v === "") return NaN;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+function parseBhkToLabel(body: Record<string, unknown>): string {
+  const raw = body.bhk;
+  if (raw == null || raw === "") return "";
+  const asNum = Number(raw);
+  if (Number.isInteger(asNum)) {
+    const label = bhkCodeToLabel(asNum);
+    if (label) return label;
+  }
+  const s = String(raw).trim();
+  if ((BHK_OPTIONS as readonly string[]).includes(s)) return s;
+  return "";
+}
 
 function parseBbox(searchParams: URLSearchParams) {
   const minLat = Number(searchParams.get("minLat"));
@@ -72,7 +98,7 @@ async function assertCooldownOk(
   }
 
   const { data } = await supabase
-    .from("rent_entries")
+    .from(RENT_ENTRIES_EXPANDED)
     .select("created_at")
     .eq("device_id_hash", deviceHash)
     .order("created_at", { ascending: false })
@@ -98,24 +124,21 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const lat = Number(body.lat);
-  const lng = Number(body.lng);
-  const rent_inr = Math.round(Number(body.rent_inr));
-  const bhk = String(body.bhk ?? "");
+  const lat = parseRequiredFiniteNumber(body.lat);
+  const lng = parseRequiredFiniteNumber(body.lng);
+  const rent_inr = (() => {
+    const n = parseOptionalNumber(body.rent ?? body.rent_inr);
+    return n == null ? NaN : n;
+  })();
+  const bhk = parseBhkToLabel(body);
   const area_label = body.area_label != null ? String(body.area_label) : null;
   const move_in_month =
     body.move_in_month != null ? String(body.move_in_month) : null;
   const broker_or_owner =
     body.broker_or_owner != null ? String(body.broker_or_owner) : null;
   const furnishing = body.furnishing != null ? String(body.furnishing) : null;
-  const maintenance_inr =
-    body.maintenance_inr != null && body.maintenance_inr !== ""
-      ? Math.round(Number(body.maintenance_inr))
-      : null;
-  const deposit_inr =
-    body.deposit_inr != null && body.deposit_inr !== ""
-      ? Math.round(Number(body.deposit_inr))
-      : null;
+  const maintenance_inr = parseOptionalNumber(body.maintenance_inr);
+  const deposit_inr = parseOptionalNumber(body.deposit_inr);
   const opt_in_building_aggregate = Boolean(body.opt_in_building_aggregate);
   const women_only = Boolean(body.women_only);
 
@@ -257,7 +280,7 @@ export async function POST(req: Request) {
     lat,
     lng,
     bhk,
-    supabase,
+    getSupabaseRead(),
   );
   const regional = validateRentAgainstRegionalMedian(rent_inr, nearbyAmounts);
   if (!regional.ok) {
@@ -295,107 +318,110 @@ export async function POST(req: Request) {
   };
 
   if (!supabase) {
+    console.warn(
+      "[POST /api/rents] No Supabase service client — DB insert skipped. Set SUPABASE_SERVICE_ROLE_KEY (service_role secret, not anon) for persisted pins.",
+    );
     const entry = localOnlyEntry();
     return NextResponse.json({ entry, persisted: false });
   }
-
-  const fullRow = {
-    lat,
-    lng,
-    rent_inr,
-    bhk,
-    area_label,
-    move_in_month,
-    broker_or_owner,
-    furnishing,
-    maintenance_inr,
-    deposit_inr,
-    opt_in_building_aggregate,
-    women_only,
-    device_id_hash: deviceHash,
-  };
-
-  const rowWithoutWomenOnly = {
-    lat,
-    lng,
-    rent_inr,
-    bhk,
-    area_label,
-    move_in_month,
-    broker_or_owner,
-    furnishing,
-    maintenance_inr,
-    deposit_inr,
-    opt_in_building_aggregate,
-    device_id_hash: deviceHash,
-  };
-
-  /** Core columns from 001_rent_entries.sql only (older DBs without extras / women_only). */
-  const rowCoreOnly = {
-    lat,
-    lng,
-    rent_inr,
-    bhk,
-    area_label,
-    move_in_month,
-    broker_or_owner,
-    furnishing,
-    device_id_hash: deviceHash,
-  };
 
   type PgErr = { code?: string; message?: string; details?: string; hint?: string };
   const errText = (e: PgErr) =>
     `${e.message ?? ""} ${e.details ?? ""} ${e.hint ?? ""}`.toLowerCase();
 
-  const looksLikeMissingWomenOnly = (e: PgErr) => {
-    const t = errText(e);
-    return t.includes("women_only") || (t.includes("column") && t.includes("women"));
+  const logSupabaseError = (label: string, err: PgErr | null) => {
+    if (!err) {
+      console.error(label, { message: "unknown (no error object)" });
+      return;
+    }
+    console.error(label, {
+      code: err.code,
+      message: err.message,
+      details: err.details,
+      hint: err.hint,
+    });
   };
 
-  const looksLikeMissingExtras = (e: PgErr) => {
-    const t = errText(e);
+  const isRlsOrPermission = (err: PgErr | null) => {
+    if (!err) return false;
+    const t = errText(err);
     return (
-      t.includes("maintenance_inr") ||
-      t.includes("deposit_inr") ||
-      t.includes("opt_in_building") ||
-      t.includes("opt_in_building_aggregate")
+      err.code === "42501" ||
+      t.includes("permission") ||
+      t.includes("rls") ||
+      t.includes("row-level security")
     );
   };
 
-  let { data, error } = await supabase
-    .from("rent_entries")
-    .insert(fullRow)
-    .select()
+  const brokerLower = (broker_or_owner ?? "").toLowerCase();
+  const sourceType =
+    brokerLower.includes("broker") ? "broker"
+    : brokerLower.includes("owner") ? "owner"
+    : "user";
+
+  const areaLabelTrim = (area_label ?? "").trim() || "Pin";
+
+  const areaPayload = { label: areaLabelTrim, lat, lng };
+  console.log("[POST /api/rents] areas.insert payload", areaPayload);
+
+  const { data: areaRow, error: areaErr } = await supabase
+    .from("areas")
+    .insert(areaPayload)
+    .select("id, label, lat, lng, created_at")
     .single();
 
-  if (error && looksLikeMissingWomenOnly(error as PgErr)) {
-    console.warn("[rent_entries insert] retrying without women_only column");
-    const r2 = await supabase
-      .from("rent_entries")
-      .insert(rowWithoutWomenOnly)
-      .select()
-      .single();
-    data = r2.data;
-    error = r2.error;
+  console.log("[POST /api/rents] areas.insert response", {
+    ok: !areaErr,
+    data: areaRow,
+    error: areaErr,
+  });
+
+  if (areaErr || !areaRow) {
+    console.error("[POST /api/rents] areas.insert failed", areaErr);
+    const entry = localOnlyEntry();
+    return NextResponse.json({
+      entry,
+      persisted: false,
+      syncWarning:
+        "Saved on this device only; could not create map area in the database.",
+    });
   }
 
-  if (error && looksLikeMissingExtras(error as PgErr)) {
-    console.warn("[rent_entries insert] retrying with core columns only");
-    const r3 = await supabase
-      .from("rent_entries")
-      .insert(rowCoreOnly)
-      .select()
-      .single();
-    data = r3.data;
-    error = r3.error;
-  }
+  const furnishingVal =
+    furnishing != null && String(furnishing).trim() !== ""
+      ? String(furnishing).trim()
+      : null;
 
-  if (error) {
-    const err = error as PgErr;
-    console.error("[rent_entries insert] failed after retries", err.code, err.message, err.details);
+  const rentEntryPayload = {
+    area_id: areaRow.id as string,
+    rent: rent_inr,
+    bhk,
+    furnishing: furnishingVal,
+  };
+  console.log("[POST /api/rents] rent_entries.insert payload", {
+    ...rentEntryPayload,
+    /** Map coordinates live on `areas`; included here for debugging only. */
+    _map_lat: lat,
+    _map_lng: lng,
+  });
 
-    const msg = errText(err);
-    if (err.code === "23505") {
+  const { data: rentRow, error: rentErr } = await supabase
+    .from("rent_entries")
+    .insert([rentEntryPayload])
+    .select("id, area_id, rent, bhk, furnishing, created_at")
+    .single();
+
+  console.log("[POST /api/rents] rent_entries.insert response", {
+    ok: !rentErr,
+    data: rentRow,
+    error: rentErr,
+  });
+
+  if (rentErr || !rentRow) {
+    logSupabaseError("[POST /api/rents] rent_entries.insert failed", rentErr as PgErr | null);
+    await supabase.from("areas").delete().eq("id", areaRow.id as string);
+    const err = rentErr as PgErr | null;
+    if (err?.code === "23505") {
       return NextResponse.json(
         {
           error: "This submission may already be on the map. Try refreshing.",
@@ -405,21 +431,162 @@ export async function POST(req: Request) {
         { status: 409 },
       );
     }
+    const rls = isRlsOrPermission(err);
+    return NextResponse.json(
+      {
+        error: rls
+          ? "Database rejected this write (permissions). Ensure the API uses SUPABASE_SERVICE_ROLE_KEY (service_role), not the anon key."
+          : "Could not save this rent pin to the database. Try again in a moment.",
+        code: rls ? "RLS_OR_PERMISSION" : "RENT_INSERT_FAILED",
+        field: "general" as const,
+        ...(process.env.NODE_ENV === "development" && err?.message
+          ? { details: err.message }
+          : {}),
+      },
+      { status: rls ? 503 : 502 },
+    );
+  }
 
-    // Last resort: pin still appears for this user (local-only), avoids blocking UX.
+  const rentId = String((rentRow as { id: string }).id);
+  console.log("[POST /api/rents] rent_entries.insert confirmed", {
+    rent_entry_id: rentId,
+    area_id: areaRow.id,
+  });
+
+  const { error: srcErr } = await supabase.from("rent_sources").insert({
+    rent_entry_id: rentId,
+    source_type: sourceType,
+    confidence_score: sourceType === "user" ? 50 : 60,
+    verified: false,
+    submitter_device_hash: deviceHash,
+  });
+
+  if (srcErr) {
+    console.error("[rent_sources insert]", srcErr);
+    await supabase.from("rent_entries").delete().eq("id", rentId);
+    await supabase.from("areas").delete().eq("id", areaRow.id as string);
     const entry = localOnlyEntry();
     return NextResponse.json({
       entry,
       persisted: false,
       syncWarning:
-        msg.includes("permission") || msg.includes("rls") || err.code === "42501"
-          ? "Saved on this device only. Ask your host to set SUPABASE_SERVICE_ROLE_KEY to the service_role secret (not the anon key) in Vercel env."
-          : "Saved on this device only; cloud database could not be updated. Run Supabase migrations or check server logs.",
+        "Saved on this device only; could not attach source metadata to this pin.",
+    });
+  }
+
+  const rollbackWrittenPin = async () => {
+    await supabase.from("rent_sources").delete().eq("rent_entry_id", rentId);
+    await supabase.from("rent_entries").delete().eq("id", rentId);
+    await supabase.from("areas").delete().eq("id", areaRow.id as string);
+  };
+
+  // Mirrors: SELECT * FROM rent_entries ORDER BY created_at DESC LIMIT 5;
+  const { data: recentFive, error: recentFiveErr } = await supabase
+    .from("rent_entries")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(5);
+
+  if (recentFiveErr) {
+    logSupabaseError(
+      "[POST /api/rents] rent_entries post-submit verify (ORDER BY created_at DESC LIMIT 5) failed",
+      recentFiveErr as PgErr,
+    );
+    await rollbackWrittenPin();
+    return NextResponse.json(
+      {
+        error: "Pin could not be verified after save. Nothing was kept.",
+        code: "RENT_ENTRIES_VERIFY_FAILED",
+        field: "general" as const,
+        ...(process.env.NODE_ENV === "development" && (recentFiveErr as PgErr).message
+          ? { details: (recentFiveErr as PgErr).message }
+          : {}),
+      },
+      { status: 502 },
+    );
+  }
+
+  if (!recentFive?.length) {
+    console.error("[POST /api/rents] rent_entries post-submit verify: no rows returned (expected at least new pin)");
+    await rollbackWrittenPin();
+    return NextResponse.json(
+      {
+        error: "Pin could not be verified after save. Nothing was kept.",
+        code: "RENT_ENTRIES_VERIFY_EMPTY",
+        field: "general" as const,
+      },
+      { status: 502 },
+    );
+  }
+
+  const { data: rowById, error: rowByIdErr } = await supabase
+    .from("rent_entries")
+    .select("*")
+    .eq("id", rentId)
+    .maybeSingle();
+
+  if (rowByIdErr || !rowById) {
+    logSupabaseError(
+      "[POST /api/rents] rent_entries post-submit verify (SELECT by id) failed",
+      rowByIdErr as PgErr | null,
+    );
+    await rollbackWrittenPin();
+    return NextResponse.json(
+      {
+        error: "Pin could not be re-read after save. Nothing was kept.",
+        code: "RENT_ENTRIES_VERIFY_BY_ID_FAILED",
+        field: "general" as const,
+      },
+      { status: 502 },
+    );
+  }
+
+  const inLatestSample = recentFive.some((r) => String(r.id) === rentId);
+  if (!inLatestSample) {
+    console.warn("[POST /api/rents] rent_entries: saved row exists but was not in latest-5 sample", {
+      rent_entry_id: rentId,
+      sampleIds: recentFive.map((r) => r.id),
+    });
+  }
+
+  console.log("[POST /api/rents] rent_entries post-submit verify OK", {
+    rent_entry_id: rentId,
+    latestSampleCount: recentFive.length,
+    sampleIds: recentFive.map((r) => r.id),
+    inLatestFiveSample: inLatestSample,
+  });
+
+  const { data: full, error: fullErr } = await supabase
+    .from(RENT_ENTRIES_EXPANDED)
+    .select("*")
+    .eq("id", rentId)
+    .maybeSingle();
+
+  if (fullErr || !full) {
+    console.error("[rent_entries_expanded read]", fullErr);
+    const entry = localOnlyEntry();
+    return NextResponse.json({
+      entry,
+      persisted: false,
+      syncWarning: "Saved on this device only; pin was written but could not be reloaded.",
     });
   }
 
   recordSubmission(deviceHash);
-  const entry = normalizeRentRow(data as Record<string, unknown>);
+  recordSubmittedPinMemory(deviceHash, lat, lng);
+  const entry = normalizeRentRow(full as Record<string, unknown>);
 
-  return NextResponse.json({ entry, persisted: true });
+  console.log("[POST /api/rents] persist OK", {
+    rent_entry_id: rentId,
+    area_id: areaRow.id,
+    persisted: true,
+    insertConfirmed: true,
+  });
+
+  return NextResponse.json({
+    entry,
+    persisted: true,
+    insertConfirmed: true,
+    ids: { rent_entry_id: rentId, area_id: String(areaRow.id) },
+  });
 }

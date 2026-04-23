@@ -7,7 +7,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "db:apply:seeker": "node scripts/apply-sql-file.mjs supabase/migrations/007_seeker_pins.sql"
+    "db:apply:seeker": "node scripts/apply-sql-file.mjs supabase/migrations/007_seeker_pins.sql",
+    "db:verify:match-seeker": "node scripts/verify-match-seeker.mjs",
+    "db:verify:request-contact": "node scripts/verify-request-contact.mjs",
+    "db:verify:seeker-rpcs": "node scripts/verify-match-seeker.mjs && node scripts/verify-request-contact.mjs",
+    "verify:seeker-api": "node scripts/verify-seeker-api.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.103.3",

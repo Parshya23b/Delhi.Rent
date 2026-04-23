@@ -1,6 +1,7 @@
 "use client";
 
 import { useLocale } from "@/components/i18n/LocaleProvider";
+import type { RentEntry } from "@/types/rent";
 import { useCallback, useState } from "react";
 
 type Result = {
@@ -9,6 +10,7 @@ type Result = {
   lat: number;
   kind?: "place" | "rent_pin";
   id?: string;
+  entry?: RentEntry;
 };
 
 function IconSearch({ className }: { className?: string }) {

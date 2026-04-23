@@ -1,6 +1,7 @@
 import { formatInr } from "@/lib/format";
 import { loadRecentRentEntries } from "@/lib/load-recent-rents";
 import { mapboxForwardGeocode } from "@/lib/mapbox-geocode-internal";
+import type { RentEntry } from "@/types/rent";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +12,8 @@ export type SearchResultItem = {
   lat: number;
   kind: "place" | "rent_pin";
   id?: string;
+  /** Full row for rent pins so the map can merge and open detail without a prior bbox fetch. */
+  entry?: RentEntry;
 };
 
 export async function GET(req: Request) {
@@ -21,6 +24,7 @@ export async function GET(req: Request) {
   }
 
   const qLower = q.trim().toLowerCase();
+  const qDigits = qLower.replace(/[,₹\s]/g, "");
 
   const [places, entries] = await Promise.all([
     mapboxForwardGeocode(q),
@@ -31,18 +35,28 @@ export async function GET(req: Request) {
     .filter((e) => {
       const label = e.area_label?.toLowerCase() ?? "";
       const bhk = e.bhk?.toLowerCase() ?? "";
+      const furn = e.furnishing?.toLowerCase() ?? "";
+      const rentStr = String(e.rent_inr);
+      const rentNorm = rentStr.replace(/\s/g, "");
+      const rentMatchesDigits =
+        qDigits.length >= 2 &&
+        /^\d+$/.test(qDigits) &&
+        rentNorm.includes(qDigits);
       return (
         (label.length > 0 && label.includes(qLower)) ||
-        (bhk.length > 0 && bhk.includes(qLower))
+        (bhk.length > 0 && bhk.includes(qLower)) ||
+        (furn.length > 0 && furn.includes(qLower)) ||
+        rentMatchesDigits
       );
     })
-    .slice(0, 8)
+    .slice(0, 10)
     .map((e) => ({
       kind: "rent_pin" as const,
       id: e.id,
       name: `${formatInr(e.rent_inr)} · ${e.bhk} · ${e.area_label ?? "Pin"}`,
       lng: e.lng,
       lat: e.lat,
+      entry: e,
     }));
 
   const placeResults: SearchResultItem[] = places.map((p) => ({
