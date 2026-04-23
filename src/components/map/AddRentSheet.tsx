@@ -387,6 +387,7 @@ export function AddRentSheet({
       onClose={onClose}
       title={t("addFormTitle")}
       tall
+      disableHandleClose={loading}
       footer={
         <div className="mx-auto w-full max-w-[560px]">
           <button

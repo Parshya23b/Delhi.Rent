@@ -11,6 +11,7 @@ export function BottomSheet({
   footer,
   tall,
   variant = "default",
+  disableHandleClose = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -20,6 +21,8 @@ export function BottomSheet({
   tall?: boolean;
   /** Map-style: centered card on wide screens, dark chrome, Google Maps–like place sheet */
   variant?: "default" | "mapPlace";
+  /** When true, the top drag handle does not close the sheet (e.g. during submit). */
+  disableHandleClose?: boolean;
 }) {
   if (!open) return null;
 
@@ -57,14 +60,26 @@ export function BottomSheet({
               ),
         )}
       >
-        <div className="flex justify-center pt-2.5 pb-1">
-          <div
+        <button
+          type="button"
+          onClick={disableHandleClose ? undefined : onClose}
+          disabled={disableHandleClose}
+          aria-label={disableHandleClose ? "Close sheet (disabled while saving)" : "Close sheet"}
+          title={disableHandleClose ? undefined : "Close"}
+          className={clsx(
+            "flex min-h-[44px] w-full shrink-0 touch-manipulation flex-col items-center justify-center gap-1.5 border-0 bg-transparent px-4 pt-2 pb-1 outline-none focus-visible:ring-2 focus-visible:ring-teal-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent active:bg-black/5 dark:active:bg-white/5",
+            isMap ? "pb-1.5 active:bg-white/5" : "",
+            disableHandleClose && "cursor-not-allowed opacity-50",
+          )}
+        >
+          <span
+            aria-hidden
             className={clsx(
-              "h-1.5 rounded-full",
+              "pointer-events-none h-1.5 rounded-full",
               isMap ? "w-12 bg-zinc-600" : "w-10 bg-zinc-200 dark:bg-zinc-600",
             )}
           />
-        </div>
+        </button>
         {title ? (
           <div
             className={clsx(

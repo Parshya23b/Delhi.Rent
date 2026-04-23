@@ -390,6 +390,7 @@ export function SeekerPinSheet({ open, onClose, draft, onSubmitted }: SeekerPinS
       onClose={handleClose}
       tall
       variant="mapPlace"
+      disableHandleClose={submitting}
       footer={
         submitted ? (
           <div className="mx-auto flex w-full max-w-[560px] gap-3">
