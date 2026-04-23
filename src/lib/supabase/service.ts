@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 let _client: SupabaseClient | null = null;
+let _anonReadClient: SupabaseClient | null = null;
 
 /** Decode `role` from a Supabase JWT (legacy `eyJ...` keys only). */
 function jwtRoleFromKey(key: string): string | null {
@@ -41,4 +42,24 @@ export function getSupabaseService(): SupabaseClient | null {
 
   if (!_client) _client = createClient(url, key);
   return _client;
+}
+
+/**
+ * Client for **reading** `rent_entries` (map, leaderboard, regional median).
+ * Uses the service role client when configured; otherwise falls back to
+ * `NEXT_PUBLIC_SUPABASE_ANON_KEY` + `NEXT_PUBLIC_SUPABASE_URL`, which is enough
+ * wherever RLS allows `select` on `rent_entries` (see migrations).
+ *
+ * Inserts and moderation paths still require {@link getSupabaseService}.
+ */
+export function getSupabaseRead(): SupabaseClient | null {
+  const svc = getSupabaseService();
+  if (svc) return svc;
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
+  if (!url || !anon) return null;
+
+  if (!_anonReadClient) _anonReadClient = createClient(url, anon);
+  return _anonReadClient;
 }

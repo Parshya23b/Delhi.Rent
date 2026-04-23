@@ -1,34 +1,29 @@
-import { generateDummyRents } from "@/lib/dummy-rents";
 import { median } from "@/lib/geo";
+import { RENT_ENTRIES_EXPANDED } from "@/lib/rent-table";
 import { entriesNearPoint } from "@/lib/rent-engine";
 import { normalizeRentRow } from "@/lib/rent-mapper";
-import { isPinExpired, PIN_MAX_AGE_MS } from "@/lib/rent-policy";
+import { PIN_MAX_AGE_MS } from "@/lib/rent-policy";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-/** Collect rent_inr values near a point for outlier validation (dummy + DB, not expired). */
+/** Collect rent_inr values near a point for outlier validation from `rent_entries`. */
 export async function collectNearbyRentAmountsForMedian(
   lat: number,
   lng: number,
   bhk: string,
   supabase: SupabaseClient | null,
 ): Promise<number[]> {
-  const dummy = generateDummyRents().filter((e) => !isPinExpired(e.created_at));
-  const fromDummy = entriesNearPoint(lat, lng, dummy, 3, bhk).map((e) => e.rent_inr);
-
-  if (!supabase) return fromDummy;
+  if (!supabase) return [];
 
   const since = new Date(Date.now() - PIN_MAX_AGE_MS).toISOString();
   const { data, error } = await supabase
-    .from("rent_entries")
+    .from(RENT_ENTRIES_EXPANDED)
     .select("*")
     .gte("created_at", since);
 
-  if (error || !data?.length) return fromDummy;
+  if (error || !data?.length) return [];
 
   const rows = data.map((r) => normalizeRentRow(r as Record<string, unknown>));
-  const fromDb = entriesNearPoint(lat, lng, rows, 3, bhk).map((e) => e.rent_inr);
-
-  return [...fromDummy, ...fromDb];
+  return entriesNearPoint(lat, lng, rows, 3, bhk).map((e) => e.rent_inr);
 }
 
 export function validateRentAgainstRegionalMedian(

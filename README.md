@@ -7,7 +7,7 @@ Anonymous rent pins for Delhi NCR (Next.js App Router, Mapbox, Supabase).
 ```bash
 npm install
 cp .env.example .env.local
-# Add NEXT_PUBLIC_MAPBOX_TOKEN (required for the map) and optional Supabase keys.
+# Add NEXT_PUBLIC_MAPBOX_TOKEN (required for the map) and Supabase keys (see below).
 npm run dev
 ```
 
@@ -22,11 +22,12 @@ Use the **same variable names** everywhere: local files (`.env.local` or `.env`)
 | `NEXT_PUBLIC_MAPBOX_TOKEN` | Yes (for map) | Mapbox GL public token (`pk.`). |
 | `MAPBOX_SECRET_TOKEN` | No | Server-side geocoding (`sk.`). |
 | `NEXT_PUBLIC_SUPABASE_URL` | No | Supabase project URL; omit to run fully offline/local submissions. |
-| `SUPABASE_SERVICE_ROLE_KEY` | No | Server-only **service_role** secret; **never** expose as `NEXT_PUBLIC_`. |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | No | **Public** anon key from Supabase → Settings → API. With URL, the server loads **map + leaderboard** reads without the service role. |
+| `SUPABASE_SERVICE_ROLE_KEY` | No | Server-only **service_role** secret; **never** expose as `NEXT_PUBLIC_`. Needed for saving pins, confirms, reports, and moderation queries. |
 
 Copy the values from your local `.env.local` into Vercel when deploying (do not commit real keys to git). The committed `.env.example` lists names only.
 
-Apply SQL migrations under `supabase/migrations/` (including `women_only`) before relying on DB features in production.
+Apply SQL migrations under `supabase/migrations/` (or paste `supabase/migrations/_apply_all.sql` in the Supabase SQL editor for a fresh project). After migrations, you can run `supabase/seed.sql` once to insert a few Delhi NCR starter pins so the map is not empty while you wait for real submissions.
 
 ### Saves fail or “saved on this device only”
 

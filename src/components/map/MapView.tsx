@@ -5,7 +5,7 @@ import {
   createPointMarkerElement,
 } from "@/components/map/rentMarkerElements";
 import { rentsToGeoJSON } from "@/components/map/rentToGeoJSON";
-import { buildRentClusterIndex } from "@/lib/rent-supercluster";
+import { buildRentClusterIndex, collectRentEntriesForCluster } from "@/lib/rent-supercluster";
 import { useRentStore } from "@/store/useRentStore";
 import type { RentEntry } from "@/types/rent";
 import mapboxgl from "mapbox-gl";
@@ -33,11 +33,20 @@ export function MapView({
   onMapError,
   isochroneGeoJSON,
   onMapReady,
+  onClusterSelect,
 }: {
   entries: RentEntry[];
   entryById: Map<string, RentEntry>;
   onMapClickEmpty: (lat: number, lng: number) => void;
   onSelectEntry: (e: RentEntry) => void;
+  /** When set, cluster pill taps resolve leaf pins and call this (still zooms to expand the cluster). */
+  onClusterSelect?: (payload: {
+    entries: RentEntry[];
+    lat: number;
+    lng: number;
+    clusterPointCount: number;
+    truncated: boolean;
+  }) => void;
   onViewportChange?: (v: { lat: number; lng: number; zoom: number }) => void;
   flyToUserOnLoad?: boolean;
   initialView?: { lng: number; lat: number; zoom: number };
@@ -61,6 +70,7 @@ export function MapView({
   const onViewportChangeRef = useRef(onViewportChange);
   const onMapErrorRef = useRef(onMapError);
   const onMapReadyRef = useRef(onMapReady);
+  const onClusterSelectRef = useRef(onClusterSelect);
   const entryByIdRef = useRef(entryById);
   const flyToUserRef = useRef(!!flyToUserOnLoad);
   const indexRef = useRef<Supercluster | null>(null);
@@ -82,6 +92,7 @@ export function MapView({
     onViewportChangeRef.current = onViewportChange;
     onMapErrorRef.current = onMapError;
     onMapReadyRef.current = onMapReady;
+    onClusterSelectRef.current = onClusterSelect;
     entryByIdRef.current = entryById;
     flyToUserRef.current = !!flyToUserOnLoad;
   }, [
@@ -90,6 +101,7 @@ export function MapView({
     onViewportChange,
     onMapError,
     onMapReady,
+    onClusterSelect,
     entryById,
     flyToUserOnLoad,
   ]);
@@ -225,6 +237,24 @@ export function MapView({
             const count = props.point_count as number;
             const key = `c-${clusterId}`;
             const el = createClusterMarkerElement(count, () => {
+              const cb = onClusterSelectRef.current;
+              if (cb) {
+                const { entries: clusterEntries, truncated } = collectRentEntriesForCluster(
+                  index,
+                  clusterId,
+                  count,
+                  entryByIdRef.current,
+                );
+                if (clusterEntries.length) {
+                  cb({
+                    entries: clusterEntries,
+                    lat,
+                    lng,
+                    clusterPointCount: count,
+                    truncated,
+                  });
+                }
+              }
               const exp = index.getClusterExpansionZoom(clusterId);
               m.easeTo({
                 center: [lng, lat],

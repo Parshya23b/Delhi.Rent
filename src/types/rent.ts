@@ -1,6 +1,20 @@
 export const BHK_OPTIONS = ["1RK", "1BHK", "2BHK", "3BHK", "4BHK+"] as const;
 export type BHKType = (typeof BHK_OPTIONS)[number];
 
+/** POST /api/rents: `bhk` is this index (0 = 1RK … 4 = 4BHK+). */
+export type RentSubmitBhkCode = 0 | 1 | 2 | 3 | 4;
+
+export function bhkCodeToLabel(code: number): BHKType | null {
+  if (!Number.isInteger(code) || code < 0 || code >= BHK_OPTIONS.length) return null;
+  return BHK_OPTIONS[code]!;
+}
+
+export function bhkLabelToCode(label: string): RentSubmitBhkCode | null {
+  const i = BHK_OPTIONS.indexOf(label as BHKType);
+  if (i < 0) return null;
+  return i as RentSubmitBhkCode;
+}
+
 export const FURNISHING_OPTIONS = [
   "Unfurnished",
   "Semi-furnished",

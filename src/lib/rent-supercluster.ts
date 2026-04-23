@@ -3,6 +3,42 @@ import Supercluster from "supercluster";
 import type { RentEntry } from "@/types/rent";
 import { rentsToGeoJSON } from "@/components/map/rentToGeoJSON";
 
+const CLUSTER_LEAF_PAGE = 400;
+const CLUSTER_LEAF_HARD_CAP = 2000;
+
+/** Resolve map-cluster leaf pins to rent entries (paginates getLeaves; caps for very large clusters). */
+export function collectRentEntriesForCluster(
+  index: Supercluster,
+  clusterId: number,
+  pointCount: number,
+  entryById: Map<string, RentEntry>,
+): { entries: RentEntry[]; truncated: boolean } {
+  const cap = Math.min(pointCount, CLUSTER_LEAF_HARD_CAP);
+  const out: RentEntry[] = [];
+  const seen = new Set<string>();
+  let offset = 0;
+
+  while (offset < cap) {
+    const pageSize = Math.min(CLUSTER_LEAF_PAGE, cap - offset);
+    const leaves = index.getLeaves(clusterId, pageSize, offset);
+    if (leaves.length === 0) break;
+    for (const leaf of leaves) {
+      const props = leaf.properties as { id?: string | number } | null | undefined;
+      const id = props?.id != null ? String(props.id) : "";
+      if (!id || seen.has(id)) continue;
+      const e = entryById.get(id);
+      if (!e) continue;
+      seen.add(id);
+      out.push(e);
+    }
+    offset += leaves.length;
+    if (leaves.length < pageSize) break;
+  }
+
+  const truncated = pointCount > CLUSTER_LEAF_HARD_CAP;
+  return { entries: out, truncated };
+}
+
 export function buildRentClusterIndex(entries: RentEntry[]): Supercluster {
   const fc = rentsToGeoJSON(entries) as FeatureCollection<Point>;
   const index = new Supercluster({

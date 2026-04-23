@@ -5,6 +5,7 @@ import {
   banDeviceMemory,
 } from "@/lib/moderation-memory";
 import { REPORTS_TO_REVOKE_POSTING } from "@/lib/rent-policy";
+import { RENT_ENTRIES_EXPANDED } from "@/lib/rent-table";
 import { getSupabaseService } from "@/lib/supabase/service";
 
 export async function POST(req: Request) {
@@ -48,7 +49,7 @@ export async function POST(req: Request) {
   }
 
   const { data: entry, error: fetchErr } = await supabase
-    .from("rent_entries")
+    .from(RENT_ENTRIES_EXPANDED)
     .select("id, device_id_hash")
     .eq("id", entryId)
     .maybeSingle();
@@ -85,7 +86,7 @@ export async function POST(req: Request) {
   }
 
   const { data: authorEntries } = await supabase
-    .from("rent_entries")
+    .from(RENT_ENTRIES_EXPANDED)
     .select("id")
     .eq("device_id_hash", authorHash);
 

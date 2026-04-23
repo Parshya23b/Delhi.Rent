@@ -1,3 +1,4 @@
+import { RENT_ENTRIES_EXPANDED } from "@/lib/rent-table";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /** ~13m in degrees at Delhi lat — “same pin” for spam detection */
@@ -49,7 +50,7 @@ export async function hasRecentDuplicateInSupabase(
 ): Promise<boolean> {
   const since = new Date(Date.now() - DUPLICATE_WINDOW_MS).toISOString();
   const { data, error } = await supabase
-    .from("rent_entries")
+    .from(RENT_ENTRIES_EXPANDED)
     .select("id")
     .eq("device_id_hash", deviceHash)
     .gte("created_at", since)
