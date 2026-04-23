@@ -1,6 +1,7 @@
 "use client";
 
 import { AddRentSheet } from "@/components/map/AddRentSheet";
+import { SeekerPinSheet } from "@/components/map/SeekerPinSheet";
 import { CompareAreasPanel } from "@/components/map/CompareAreasPanel";
 import { InsightsPanel } from "@/components/map/InsightsPanel";
 import { MapFiltersBar } from "@/components/map/MapFiltersBar";
@@ -389,6 +390,22 @@ export function MapExplorer() {
     setAddOpen(true);
   };
 
+  const [seekerOpen, setSeekerOpen] = useState(false);
+  const [seekerDraft, setSeekerDraft] = useState<{
+    lat: number;
+    lng: number;
+    areaLabel: string;
+  } | null>(null);
+
+  const openSeekerFromCenter = useCallback(() => {
+    const lat = viewport?.lat ?? 28.55;
+    const lng = viewport?.lng ?? 77.2;
+    setAddOpen(false);
+    setPinOpen(false);
+    setSeekerDraft({ lat, lng, areaLabel });
+    setSeekerOpen(true);
+  }, [viewport?.lat, viewport?.lng, areaLabel]);
+
   const handleCyberIso = async () => {
     if (isochroneGeoJSON) {
       setIsochroneGeoJSON(null);
@@ -496,6 +513,11 @@ export function MapExplorer() {
           />
           <MapBottomFindBar
             onPrimary={openAddFromCenter}
+            onSeeker={openSeekerFromCenter}
+            primaryLabel={t("ctaAddRent")}
+            primaryHint={t("ctaAddRentHint")}
+            seekerLabel={t("ctaSeeker")}
+            seekerHint={t("ctaSeekerHint")}
             onHowTo={() => setHowToOpen(true)}
             builtBy="delhi.rent"
           />
@@ -731,6 +753,16 @@ export function MapExplorer() {
         draft={addDraft}
         allEntries={entries}
         onSubmitted={onSubmitted}
+      />
+
+      <SeekerPinSheet
+        key={seekerDraft ? `seek-${seekerDraft.lat}-${seekerDraft.lng}` : "seek-closed"}
+        open={seekerOpen}
+        onClose={() => {
+          setSeekerOpen(false);
+          setSeekerDraft(null);
+        }}
+        draft={seekerDraft}
       />
 
       <PinDetailSheet

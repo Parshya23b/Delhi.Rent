@@ -159,15 +159,25 @@ export function MapFloatingStack({
 
 export function MapBottomFindBar({
   onPrimary,
+  onSeeker,
   onHowTo,
   builtBy,
+  primaryLabel = "Find Flat or Tenants",
+  primaryHint = "Tap to start →",
+  seekerLabel = "Drop a Seeker Pin",
+  seekerHint = "Looking for a flat? →",
 }: {
   onPrimary: () => void;
+  onSeeker?: () => void;
   onHowTo: () => void;
   builtBy: string;
+  primaryLabel?: string;
+  primaryHint?: string;
+  seekerLabel?: string;
+  seekerHint?: string;
 }) {
   return (
-    <div className="pointer-events-auto absolute bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] left-1/2 z-40 flex w-[min(100%-1.5rem,420px)] -translate-x-1/2 flex-col items-center gap-2 sm:bottom-[5.25rem]">
+    <div className="pointer-events-auto absolute bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] left-1/2 z-40 flex w-[min(100%-1.5rem,420px)] -translate-x-1/2 flex-col items-stretch gap-2 sm:bottom-[5.25rem]">
       <button
         type="button"
         onClick={onPrimary}
@@ -177,10 +187,27 @@ export function MapBottomFindBar({
           🏠
         </span>
         <span className="flex-1 text-left">
-          Find Flat or Tenants
-          <span className="ml-2 text-[#a78bfa]">Tap to start →</span>
+          {primaryLabel}
+          <span className="ml-2 text-[#a78bfa]">{primaryHint}</span>
         </span>
       </button>
+
+      {onSeeker ? (
+        <button
+          type="button"
+          onClick={onSeeker}
+          className="flex w-full items-center justify-center gap-2 rounded-full border border-violet-500/40 bg-gradient-to-b from-violet-500/15 to-violet-700/15 py-3 pl-4 pr-5 text-sm font-semibold text-violet-100 shadow-lg shadow-black/30 ring-1 ring-white/5 backdrop-blur transition hover:from-violet-500/25 hover:to-violet-700/25 active:scale-[0.99]"
+        >
+          <span className="text-lg" aria-hidden>
+            📍
+          </span>
+          <span className="flex-1 text-left">
+            {seekerLabel}
+            <span className="ml-2 text-violet-300/90">{seekerHint}</span>
+          </span>
+        </button>
+      ) : null}
+
       <div className="flex w-full items-center justify-between px-1 text-[10px] text-zinc-500">
         <button
           type="button"
