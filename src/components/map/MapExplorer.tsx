@@ -462,6 +462,16 @@ export function MapExplorer() {
     void navigator.clipboard.writeText(u.toString());
   }, [viewport, mapFilters.bhk, showHeatmap, insightsExpanded]);
 
+  const openLiveStatsDock = useCallback(() => {
+    setInsightsExpanded(true);
+    setMapHeaderExpanded(false);
+    requestAnimationFrame(() => {
+      document
+        .getElementById("map-insights-dock")
+        ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  }, []);
+
   return (
     <div className="relative h-dvh w-full min-h-[100svh] overflow-hidden bg-black">
       {!showListFallback ? (
@@ -491,11 +501,7 @@ export function MapExplorer() {
             }}
             metroOn={layers.metro}
             onMetro={() => setLayers({ metro: !layers.metro })}
-            onAreaStats={() => {
-              document
-                .getElementById("map-insights-dock")
-                ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-            }}
+            onAreaStats={openLiveStatsDock}
             onLocate={() => {
               if (typeof navigator === "undefined" || !navigator.geolocation) return;
               navigator.geolocation.getCurrentPosition(
@@ -684,11 +690,7 @@ export function MapExplorer() {
             <MapStatusStrip
               entryCount={filteredEntries.length}
               totalRentInr={totalRentPinned}
-              onLiveStats={() => {
-                document
-                  .getElementById("map-insights-dock")
-                  ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-              }}
+              onLiveStats={openLiveStatsDock}
             />
 
             <div className="-mx-0.5 overflow-x-auto px-0.5 pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -702,6 +704,15 @@ export function MapExplorer() {
         <InsightsPanel
           areaLabel={areaLabel}
           slice={insightSlice}
+          liveSnapshot={{
+            pinsLoaded: entries.length,
+            pinsOnMapFiltered: filteredEntries.length,
+            pinsNearCenter: insightSlice.length,
+            totalRentInrFiltered: totalRentPinned,
+            mapFilters,
+            showHeatmap,
+            layers,
+          }}
           share={
             hasContributed && insightStats
               ? {
