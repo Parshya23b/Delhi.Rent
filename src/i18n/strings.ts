@@ -96,6 +96,9 @@ export const STRINGS: Record<
     clusterFlatsTitle: "{count} flats here",
     clusterFlatsHint: "Tap a listing for full details.",
     clusterFlatsTruncated: "Showing {shown} of {total} in this cluster — zoom in for smaller groups.",
+    seekerMatchesTitle: "Rent matches ({count})",
+    seekerMatchesHint: "Within this seeker’s radius and budget. Tap a row for full details.",
+    seekerMatchesEmpty: "No rent pins match this seeker nearby (try a wider map or more budget).",
     copyMapLink: "Copy map link",
     womenOnlyFilter: "Women-only spaces",
     womenOnlyBlurb:
@@ -296,6 +299,9 @@ export const STRINGS: Record<
     clusterFlatsHint: "पूरी जानकारी के लिए कोई सूची टैप करें।",
     clusterFlatsTruncated:
       "इस क्लस्टर में {shown} / {total} दिख रहे हैं — छोटे समूह के लिए ज़ूम करें।",
+    seekerMatchesTitle: "किराया मैच ({count})",
+    seekerMatchesHint: "इस सीकर की त्रिज्या और बजट के अंदर। पूरी जानकारी के लिए पंक्ति टैप करें।",
+    seekerMatchesEmpty: "पास कोई मैचिंग किराया पिन नहीं (ज़ूम या बजट बढ़ाकर देखें)।",
     copyMapLink: "मानचित्र लिंक कॉपी करें",
     womenOnlyFilter: "केवल महिलाओं के लिए",
     womenOnlyBlurb:

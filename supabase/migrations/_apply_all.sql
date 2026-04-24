@@ -831,3 +831,94 @@ grant insert on public.areas to anon, authenticated;
 grant insert on public.rent_entries to anon, authenticated;
 grant insert on public.rent_sources to anon, authenticated;
 grant insert on public.rent_history to anon, authenticated;
+
+-- ============================================================
+-- 020_rent_entries_realtime.sql — publication for INSERT events
+-- ============================================================
+do $pub$
+begin
+  if not exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    return;
+  end if;
+
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'rent_entries'
+  ) then
+    execute 'alter publication supabase_realtime add table public.rent_entries';
+  end if;
+end
+$pub$;
+
+-- ============================================================
+-- 021_seeker_pins_step5_spec.sql — minimal seeker_pins if absent
+-- ============================================================
+do $step5$
+begin
+  if to_regclass('public.seeker_pins') is not null then
+    raise notice 'public.seeker_pins already exists — see 012_seeker_pin_auth_step1.sql';
+    return;
+  end if;
+
+  create table public.seeker_pins (
+    id uuid primary key default gen_random_uuid(),
+    user_id uuid references auth.users (id),
+    lat double precision not null,
+    lng double precision not null,
+    budget integer,
+    bhk integer,
+    move_in text,
+    created_at timestamptz not null default now()
+  );
+
+  comment on table public.seeker_pins is 'Seeker demand pins (STEP 5 minimal shape).';
+end
+$step5$;
+
+-- ============================================================
+-- 022_seeker_pins_rls_public_read_auth_insert.sql
+-- ============================================================
+alter table public.seeker_pins enable row level security;
+
+drop policy if exists "seeker_pins public read active" on public.seeker_pins;
+drop policy if exists "seeker_pins owner read inactive" on public.seeker_pins;
+drop policy if exists "seeker_pins_public_read" on public.seeker_pins;
+
+create policy "seeker_pins_public_read"
+  on public.seeker_pins
+  for select
+  to anon, authenticated
+  using (true);
+
+drop policy if exists "seeker_pins insert own" on public.seeker_pins;
+drop policy if exists "seeker_pins insert_authenticated" on public.seeker_pins;
+
+create policy "seeker_pins_insert_authenticated"
+  on public.seeker_pins
+  for insert
+  to authenticated
+  with check (auth.uid() is not null and auth.uid() = user_id);
+
+-- ============================================================
+-- 023_seeker_pins_realtime.sql — publication for seeker_pins
+-- ============================================================
+do $pub$
+begin
+  if not exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    return;
+  end if;
+
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'seeker_pins'
+  ) then
+    execute 'alter publication supabase_realtime add table public.seeker_pins';
+  end if;
+end
+$pub$;

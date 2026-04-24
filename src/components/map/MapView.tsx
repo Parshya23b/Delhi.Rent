@@ -4,15 +4,24 @@ import {
   createClusterMarkerElement,
   createPointMarkerElement,
 } from "@/components/map/rentMarkerElements";
+import { createSeekerPinMarkerElement } from "@/components/map/seekerMarkerElements";
 import { rentsToGeoJSON } from "@/components/map/rentToGeoJSON";
 import { buildRentClusterIndex, collectRentEntriesForCluster } from "@/lib/rent-supercluster";
+import {
+  getSeekerPins,
+  type SeekerMapPin,
+} from "@/lib/supabase/get-seeker-pins";
+import { getRentPins, rentPinToRentEntry, type RentPin } from "@/lib/supabase/get-rent-pins";
+import { subscribeRentEntriesRealtime } from "@/lib/supabase/rent-entries-realtime";
+import { subscribeSeekerPinsRealtime } from "@/lib/supabase/seeker-pins-realtime";
+import { getSupabaseRead } from "@/lib/supabase/service";
 import { useRentStore } from "@/store/useRentStore";
 import type { RentEntry } from "@/types/rent";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import type { FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import type Supercluster from "supercluster";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const DEFAULT_CENTER: [number, number] = [77.2, 28.55];
 const DEFAULT_ZOOM = 9.2;
@@ -22,8 +31,8 @@ function getToken(): string | undefined {
 }
 
 export function MapView({
-  entries,
-  entryById,
+  entries: _storeEntries,
+  entryById: _storeEntryById,
   onMapClickEmpty,
   onSelectEntry,
   onViewportChange,
@@ -34,11 +43,18 @@ export function MapView({
   isochroneGeoJSON,
   onMapReady,
   onClusterSelect,
+  onSelectSeekerPin,
+  onMapEntriesChange,
+  onSeekerPinsChange,
+  /** Bumps to force a full rent + seeker reload from Supabase (e.g. after seeker submit). */
+  dbPinsReloadKey = 0,
 }: {
   entries: RentEntry[];
   entryById: Map<string, RentEntry>;
   onMapClickEmpty: (lat: number, lng: number) => void;
   onSelectEntry: (e: RentEntry) => void;
+  /** Seeker marker tap: same rent pool as map clustering (`getRentPins`). */
+  onSelectSeekerPin?: (pin: SeekerMapPin, rentEntries: RentEntry[]) => void;
   /** When set, cluster pill taps resolve leaf pins and call this (still zooms to expand the cluster). */
   onClusterSelect?: (payload: {
     entries: RentEntry[];
@@ -55,7 +71,126 @@ export function MapView({
   isochroneGeoJSON?: FeatureCollection<Polygon | MultiPolygon> | null;
   /** Fired once when the map style and base layers are ready (for locate, fly, etc.). */
   onMapReady?: (map: mapboxgl.Map) => void;
+  /** Fired when DB-backed rent pins used on the map change (load + realtime). */
+  onMapEntriesChange?: (entries: RentEntry[]) => void;
+  /** Fired when seeker pins from DB change (load + realtime). */
+  onSeekerPinsChange?: (pins: SeekerMapPin[]) => void;
+  dbPinsReloadKey?: number;
 }) {
+  const [pins, setPins] = useState<RentPin[]>([]);
+  const [seekerPins, setSeekerPins] = useState<SeekerMapPin[]>([]);
+
+  /** Full load from Supabase only (no static pins). Re-runs when store/API merges new rents or parent bumps reload key. */
+  useEffect(() => {
+    const supabase = getSupabaseRead();
+    if (!supabase) {
+      console.warn(
+        "[MapView] DB pin load skipped — no Supabase read client. Set NEXT_PUBLIC_SUPABASE_URL + NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+      );
+      return;
+    }
+
+    let cancelled = false;
+    const loadFromDb = (reason: string) => {
+      console.log("[MapView] Loading rent + seeker pins from DB:", reason);
+      void Promise.all([getRentPins(supabase), getSeekerPins(supabase)]).then(([rent, seeker]) => {
+        if (cancelled) return;
+        console.log("[MapView] DB pin load OK:", {
+          reason,
+          rentPins: rent.length,
+          seekerPins: seeker.length,
+        });
+        setPins(rent);
+        setSeekerPins(seeker);
+      });
+    };
+
+    loadFromDb(
+      `bootstrap storeLen=${_storeEntries.length} reloadKey=${dbPinsReloadKey}`,
+    );
+
+    const onVis = () => {
+      if (document.visibilityState !== "visible") return;
+      loadFromDb("document-visibility-visible");
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [_storeEntries.length, dbPinsReloadKey]);
+
+  useEffect(() => {
+    const supabase = getSupabaseRead();
+    if (!supabase) {
+      console.warn("[MapView] Realtime skipped — no Supabase client");
+      return;
+    }
+
+    const upsertRent = (pin: RentPin) => {
+      console.log("[MapView] rent pin apply (realtime)", { id: pin.id });
+      setPins((prev) => {
+        const i = prev.findIndex((p) => p.id === pin.id);
+        if (i >= 0) {
+          const next = [...prev];
+          next[i] = pin;
+          return next;
+        }
+        return prev.some((p) => p.id === pin.id) ? prev : [...prev, pin];
+      });
+    };
+
+    const unsubRent = subscribeRentEntriesRealtime(supabase, {
+      upsertPin: upsertRent,
+      removePin: (id) => {
+        console.log("[MapView] rent pin remove (realtime)", { id });
+        setPins((prev) => prev.filter((p) => p.id !== id));
+      },
+      refetchPins: async () => {
+        console.log("[MapView] rent pins full refetch (realtime fallback)");
+        const next = await getRentPins(supabase);
+        setPins(next);
+      },
+    });
+
+    const unsubSeeker = subscribeSeekerPinsRealtime(supabase, {
+      upsertPin: (pin) => {
+        console.log("[MapView] seeker pin apply (realtime)", { id: pin.id });
+        setSeekerPins((prev) => {
+          const i = prev.findIndex((p) => p.id === pin.id);
+          if (i >= 0) {
+            const next = [...prev];
+            next[i] = pin;
+            return next;
+          }
+          return prev.some((p) => p.id === pin.id) ? prev : [...prev, pin];
+        });
+      },
+      removePin: (id) => {
+        console.log("[MapView] seeker pin remove (realtime)", { id });
+        setSeekerPins((prev) => prev.filter((p) => p.id !== id));
+      },
+      refetchPins: async () => {
+        console.log("[MapView] seeker pins full refetch (realtime fallback)");
+        const next = await getSeekerPins(supabase);
+        setSeekerPins(next);
+      },
+    });
+
+    return () => {
+      unsubRent();
+      unsubSeeker();
+    };
+  }, []);
+
+  /** Map pins come only from Supabase (`getRentPins`); not from persisted store or mock data. */
+  const mapEntries = useMemo(() => pins.map(rentPinToRentEntry), [pins]);
+
+  const entryByIdMerged = useMemo(
+    () => new Map(mapEntries.map((e) => [e.id, e] as const)),
+    [mapEntries],
+  );
+
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const viewportTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -71,20 +206,38 @@ export function MapView({
   const onMapErrorRef = useRef(onMapError);
   const onMapReadyRef = useRef(onMapReady);
   const onClusterSelectRef = useRef(onClusterSelect);
-  const entryByIdRef = useRef(entryById);
+  const onSelectSeekerPinRef = useRef(onSelectSeekerPin);
+  const entryByIdRef = useRef(entryByIdMerged);
   const flyToUserRef = useRef(!!flyToUserOnLoad);
   const indexRef = useRef<Supercluster | null>(null);
   const htmlMarkersRef = useRef<Map<string, mapboxgl.Marker>>(new Map());
+  const seekerMarkersRef = useRef<Map<string, mapboxgl.Marker>>(new Map());
+  const seekerPinsRef = useRef<SeekerMapPin[]>([]);
   const syncHtmlMarkersRef = useRef<(() => void) | null>(null);
-  const entriesRef = useRef(entries);
+  const entriesRef = useRef(mapEntries);
+  const onMapEntriesChangeRef = useRef(onMapEntriesChange);
+  const onSeekerPinsChangeRef = useRef(onSeekerPinsChange);
 
   useEffect(() => {
     initialViewRef.current = initialView;
   }, [initialView]);
 
   useEffect(() => {
-    entriesRef.current = entries;
-  }, [entries]);
+    entriesRef.current = mapEntries;
+  }, [mapEntries]);
+
+  useEffect(() => {
+    onMapEntriesChangeRef.current?.(mapEntries);
+  }, [mapEntries]);
+
+  useEffect(() => {
+    onSeekerPinsChangeRef.current?.(seekerPins);
+  }, [seekerPins]);
+
+  useEffect(() => {
+    seekerPinsRef.current = seekerPins;
+    syncHtmlMarkersRef.current?.();
+  }, [seekerPins]);
 
   useEffect(() => {
     onMapClickEmptyRef.current = onMapClickEmpty;
@@ -93,7 +246,10 @@ export function MapView({
     onMapErrorRef.current = onMapError;
     onMapReadyRef.current = onMapReady;
     onClusterSelectRef.current = onClusterSelect;
-    entryByIdRef.current = entryById;
+    onSelectSeekerPinRef.current = onSelectSeekerPin;
+    onMapEntriesChangeRef.current = onMapEntriesChange;
+    onSeekerPinsChangeRef.current = onSeekerPinsChange;
+    entryByIdRef.current = entryByIdMerged;
     flyToUserRef.current = !!flyToUserOnLoad;
   }, [
     onMapClickEmpty,
@@ -102,21 +258,24 @@ export function MapView({
     onMapError,
     onMapReady,
     onClusterSelect,
-    entryById,
+    onSelectSeekerPin,
+    onMapEntriesChange,
+    onSeekerPinsChange,
+    entryByIdMerged,
     flyToUserOnLoad,
   ]);
 
   useEffect(() => {
-    indexRef.current = buildRentClusterIndex(entries);
+    indexRef.current = buildRentClusterIndex(mapEntries);
     syncHtmlMarkersRef.current?.();
-  }, [entries]);
+  }, [mapEntries]);
 
   const updateData = useCallback(() => {
     const map = mapRef.current;
     if (!map?.getSource("rents")) return;
     const src = map.getSource("rents") as mapboxgl.GeoJSONSource;
-    src.setData(rentsToGeoJSON(entries));
-  }, [entries]);
+    src.setData(rentsToGeoJSON(mapEntries));
+  }, [mapEntries]);
 
   useEffect(() => {
     updateData();
@@ -206,6 +365,8 @@ export function MapView({
     });
 
     map.on("load", () => {
+      const seekerMarkers = seekerMarkersRef.current;
+
       const syncHtmlMarkers = () => {
         const m = mapRef.current;
         const index = indexRef.current;
@@ -213,6 +374,8 @@ export function MapView({
 
         htmlMarkers.forEach((mk) => mk.remove());
         htmlMarkers.clear();
+        seekerMarkers.forEach((mk) => mk.remove());
+        seekerMarkers.clear();
 
         const b = m.getBounds();
         if (!b) return;
@@ -279,6 +442,18 @@ export function MapView({
               .addTo(m);
             htmlMarkers.set(key, marker);
           }
+        }
+
+        for (const sp of seekerPinsRef.current) {
+          if (!b.contains([sp.lng, sp.lat])) continue;
+          const key = `s-${sp.id}`;
+          const el = createSeekerPinMarkerElement(sp, () => {
+            onSelectSeekerPinRef.current?.(sp, entriesRef.current);
+          });
+          const marker = new mapboxgl.Marker({ element: el, anchor: "center" })
+            .setLngLat([sp.lng, sp.lat])
+            .addTo(m);
+          seekerMarkers.set(key, marker);
         }
       };
 
@@ -519,6 +694,8 @@ export function MapView({
       clearTimeout(viewportTimerRef.current);
       htmlMarkers.forEach((mk) => mk.remove());
       htmlMarkers.clear();
+      seekerMarkersRef.current.forEach((mk) => mk.remove());
+      seekerMarkersRef.current.clear();
       syncHtmlMarkersRef.current = null;
       map.remove();
       mapRef.current = null;

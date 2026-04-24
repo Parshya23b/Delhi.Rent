@@ -14,6 +14,27 @@ const defaultMapFilters: MapFilterState = {
   womenOnly: false,
 };
 
+const defaultLayers = {
+  metro: true,
+  zones: true,
+  rera: false,
+  safety: false,
+} as const;
+
+/** Union by id; later entries in `second` win (server/API overwrites stale client). */
+function mergeEntriesByIdPreferSecond(first: RentEntry[], second: RentEntry[]): RentEntry[] {
+  const map = new Map<string, RentEntry>();
+  for (const e of first) map.set(e.id, e);
+  for (const e of second) map.set(e.id, e);
+  return Array.from(map.values());
+}
+
+type PersistedSlice = {
+  hasContributed: boolean;
+  layers: RentState["layers"];
+  mapFilters: MapFilterState;
+};
+
 interface RentState {
   entries: RentEntry[];
   setEntries: (e: RentEntry[]) => void;
@@ -44,6 +65,9 @@ interface RentState {
   setMapFilters: (p: Partial<MapFilterState>) => void;
 }
 
+/** Bumped when persisted shape changes — v3 drops `entries` so map truth is always from DB/API. */
+const PERSIST_VERSION = 3;
+
 export const useRentStore = create<RentState>()(
   persist(
     (set, get) => ({
@@ -51,15 +75,7 @@ export const useRentStore = create<RentState>()(
       setEntries: (entries) => set({ entries }),
       mergeEntries: (more) => {
         const cur = get().entries;
-        const ids = new Set(cur.map((x) => x.id));
-        const merged = [...cur];
-        for (const e of more) {
-          if (!ids.has(e.id)) {
-            ids.add(e.id);
-            merged.push(e);
-          }
-        }
-        set({ entries: merged });
+        set({ entries: mergeEntriesByIdPreferSecond(cur, more) });
       },
       updateEntryFields: (id, patch) => {
         const next = get().entries.map((e) =>
@@ -79,7 +95,7 @@ export const useRentStore = create<RentState>()(
       setAddDraft: (d) => set({ addDraft: d }),
       showHeatmap: false,
       setShowHeatmap: (v) => set({ showHeatmap: v }),
-      layers: { metro: true, zones: true, rera: false, safety: false },
+      layers: { ...defaultLayers },
       setLayers: (p) => set({ layers: { ...get().layers, ...p } }),
       mapFilters: defaultMapFilters,
       setMapFilters: (p) =>
@@ -87,11 +103,26 @@ export const useRentStore = create<RentState>()(
     }),
     {
       name: "delhi-rent-store",
-      partialize: (s) => ({
+      version: PERSIST_VERSION,
+      partialize: (s): PersistedSlice => ({
         hasContributed: s.hasContributed,
         layers: s.layers,
         mapFilters: s.mapFilters,
       }),
+      migrate: (persisted, fromVersion) => {
+        const p = (persisted ?? {}) as Record<string, unknown>;
+        if (fromVersion < PERSIST_VERSION) {
+          return {
+            hasContributed: Boolean(p.hasContributed),
+            layers: {
+              ...defaultLayers,
+              ...(p.layers as RentState["layers"] | undefined),
+            },
+            mapFilters: { ...defaultMapFilters, ...(p.mapFilters as Partial<MapFilterState>) },
+          };
+        }
+        return persisted as PersistedSlice;
+      },
     },
   ),
 );
