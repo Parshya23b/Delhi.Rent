@@ -183,8 +183,32 @@ export function MapView({
     };
   }, []);
 
-  /** Map pins come only from Supabase (`getRentPins`); not from persisted store or mock data. */
-  const mapEntries = useMemo(() => pins.map(rentPinToRentEntry), [pins]);
+  /**
+   * Map pins: primary source is `getRentPins` (client Supabase). We also append any
+   * `entries` from the parent (GET `/api/rents` + submit merge) that are not yet in that
+   * set, so after refresh a pin still shows if the server list has it but the browser
+   * client was misconfigured (missing NEXT_PUBLIC_*) until the next deploy — same rows,
+   * still from your DB via the API.
+   */
+  const mapEntries = useMemo(() => {
+    const fromDb = pins.map(rentPinToRentEntry);
+    const dbIds = new Set(fromDb.map((e) => e.id));
+    const fromApi = _storeEntries.filter((e) => {
+      if (!e.id || dbIds.has(e.id)) return false;
+      return (
+        Number.isFinite(e.lat) &&
+        Number.isFinite(e.lng) &&
+        Number.isFinite(e.rent_inr)
+      );
+    });
+    if (fromApi.length > 0) {
+      console.log(
+        "[MapView] Merged rent entries from store (API) missing from client DB pin set",
+        { extra: fromApi.length, total: fromDb.length + fromApi.length },
+      );
+    }
+    return [...fromDb, ...fromApi];
+  }, [pins, _storeEntries]);
 
   const entryByIdMerged = useMemo(
     () => new Map(mapEntries.map((e) => [e.id, e] as const)),

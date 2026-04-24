@@ -567,6 +567,7 @@ export function MapExplorer() {
       window.setTimeout(() => {
         openLiveStatsDock();
       }, 400);
+      setDbPinsReloadKey((k) => k + 1);
     },
     [setMapFilters, openLiveStatsDock],
   );
