@@ -225,7 +225,15 @@ export function AddRentSheet({
   onClose: () => void;
   draft: { lat: number; lng: number; areaLabel: string } | null;
   allEntries: RentEntry[];
-  onSubmitted: (entry: RentEntry, overpay: { pct: number; median: number }) => void;
+  onSubmitted: (
+    entry: RentEntry,
+    overpay: {
+      pct: number;
+      median: number;
+      persisted: boolean;
+      syncWarning?: string;
+    },
+  ) => void;
 }) {
   const { t } = useLocale();
   const mergeEntries = useRentStore((s) => s.mergeEntries);
@@ -376,6 +384,8 @@ export function AddRentSheet({
         field?: FormField;
         retryAfterSec?: number;
         entry?: RentEntry;
+        persisted?: boolean;
+        syncWarning?: string;
       };
       if (!res.ok) {
         let msg = data.error ?? "Could not submit";
@@ -397,7 +407,12 @@ export function AddRentSheet({
       const median = stats?.median ?? rentNum;
       const pct = overpayPercent(rentNum, median);
 
-      onSubmitted(entry, { pct, median });
+      onSubmitted(entry, {
+        pct,
+        median,
+        persisted: data.persisted !== false,
+        syncWarning: data.syncWarning,
+      });
       reset();
       onClose();
     } catch {

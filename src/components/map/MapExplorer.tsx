@@ -13,8 +13,21 @@ import {
   MapStatusStrip,
 } from "@/components/map/MapUiChrome";
 import { ClusterFlatsSheet } from "@/components/map/ClusterFlatsSheet";
-import { MapView } from "@/components/map/MapView";
 import { SeekerMatchesSheet } from "@/components/map/SeekerMatchesSheet";
+import dynamic from "next/dynamic";
+
+const MapView = dynamic(
+  () => import("@/components/map/MapView").then((m) => m.MapView),
+  {
+    ssr: false,
+    loading: () => (
+      <div
+        className="h-full w-full min-h-[50dvh] bg-zinc-950"
+        aria-hidden
+      />
+    ),
+  },
+);
 import { NearbyRentList } from "@/components/map/NearbyRentList";
 import { OverpayBanner } from "@/components/map/OverpayBanner";
 import { PinDetailSheet } from "@/components/map/PinDetailSheet";
@@ -213,6 +226,8 @@ export function MapExplorer() {
   }>({ open: false, userRent: 0, median: 0, pct: 0 });
 
   const [mapError, setMapError] = useState<string | null>(null);
+  /** Shown when POST returned a local-only pin (no DB) so refresh would drop it. */
+  const [persistWarning, setPersistWarning] = useState<string | null>(null);
   /** Bumps {@link MapView} full Supabase reload for rent + seeker (seeker submit; store alone does not bump seeker). */
   const [dbPinsReloadKey, setDbPinsReloadKey] = useState(0);
   const [flyTo, setFlyTo] = useState<{
@@ -272,9 +287,13 @@ export function MapExplorer() {
     void (async () => {
       try {
         const res = await fetch("/api/rents");
-        const data = await res.json();
+        if (!res.ok) {
+          console.warn("[MapExplorer] GET /api/rents failed", res.status);
+          return;
+        }
+        const data = (await res.json()) as { entries?: RentEntry[] };
         if (!cancelled && data.entries) {
-          mergeEntries(data.entries as RentEntry[]);
+          mergeEntries(data.entries);
         }
       } catch {
         /* ignore */
@@ -298,10 +317,16 @@ export function MapExplorer() {
         maxLng: String(b.maxLng),
       });
       void fetch(`/api/rents?${q}`, { signal: ctrl.signal })
-        .then((r) => r.json())
-        .then((data: { entries?: RentEntry[] }) => {
-          if (cancelled || !data.entries) return;
-          mergeEntries(data.entries as RentEntry[]);
+        .then(async (r) => {
+          if (!r.ok) {
+            console.warn("[MapExplorer] GET /api/rents (bbox) failed", r.status);
+            return;
+          }
+          return r.json() as Promise<{ entries?: RentEntry[] }>;
+        })
+        .then((data) => {
+          if (cancelled || !data?.entries) return;
+          mergeEntries(data.entries);
         })
         .catch(() => {});
     }, 600);
@@ -538,10 +563,27 @@ export function MapExplorer() {
   }, []);
 
   const onSubmitted = useCallback(
-    (_entry: RentEntry, o: { pct: number; median: number }) => {
+    (
+      _entry: RentEntry,
+      o: {
+        pct: number;
+        median: number;
+        persisted: boolean;
+        syncWarning?: string;
+      },
+    ) => {
       console.log("[MapExplorer] rent pin submitted (store merge will reload map DB pins)", {
         id: _entry.id,
+        persisted: o.persisted,
       });
+      if (!o.persisted) {
+        setPersistWarning(
+          o.syncWarning ??
+            "This pin was not saved to the database. Set SUPABASE_SERVICE_ROLE_KEY on the server and redeploy.",
+        );
+      } else {
+        setPersistWarning(null);
+      }
       // Match filters to this listing so the new pill marker is not hidden (BHK/rent/women-only, etc.).
       setMapFilters({
         bhk: _entry.bhk,
@@ -886,6 +928,22 @@ export function MapExplorer() {
                 <ThemeToggle />
               </div>
             </div>
+
+            {persistWarning ? (
+              <div
+                className="pointer-events-auto flex items-start gap-2 rounded-xl border border-amber-500/45 bg-amber-950/90 px-3 py-2.5 text-[11px] leading-snug text-amber-100 shadow-lg ring-1 ring-amber-500/20 sm:text-xs"
+                role="status"
+              >
+                <span className="min-w-0 flex-1">{persistWarning}</span>
+                <button
+                  type="button"
+                  className="shrink-0 font-semibold text-amber-200 underline decoration-amber-200/50 underline-offset-2"
+                  onClick={() => setPersistWarning(null)}
+                >
+                  Dismiss
+                </button>
+              </div>
+            ) : null}
 
             <MapStatusStrip
               entryCount={filteredEntries.length}

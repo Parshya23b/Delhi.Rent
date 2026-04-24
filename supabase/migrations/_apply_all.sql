@@ -922,3 +922,17 @@ begin
   end if;
 end
 $pub$;
+
+-- ============================================================
+-- 024_rent_entries_public_read_ensure.sql — public read policy
+-- ============================================================
+alter table if exists public.rent_entries enable row level security;
+
+drop policy if exists "Allow public read" on public.rent_entries;
+
+create policy "Allow public read"
+  on public.rent_entries
+  for select
+  using (true);
+
+grant select on table public.rent_entries to anon, authenticated;

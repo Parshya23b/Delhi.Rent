@@ -45,12 +45,14 @@ export function getSupabaseService(): SupabaseClient | null {
 }
 
 /**
- * Client for **reading** `rent_entries` (map, leaderboard, regional median).
- * Uses the service role client when configured; otherwise falls back to
- * `NEXT_PUBLIC_SUPABASE_ANON_KEY` + `NEXT_PUBLIC_SUPABASE_URL`, which is enough
- * wherever RLS allows `select` on `rent_entries` (see migrations).
- *
- * Inserts and moderation paths still require {@link getSupabaseService}.
+ * Client for **reading** `rent_entries` (map, leaderboard, regional median) and
+ * for **server-side API writes** (e.g. `POST /api/rents`) when you prefer the
+ * same client as the browser: {@link getSupabaseService} is used first when
+ * set; otherwise the anon key is used. Crowdsource migrations allow `anon`
+ * `insert` on `areas` / `rent_entries` / `rent_sources`, so pins persist even
+ * if `SUPABASE_SERVICE_ROLE_KEY` is not configured (service role is still
+ * recommended for admin paths and for rollbacks that need `delete` under
+ * stricter RLS).
  */
 export function getSupabaseRead(): SupabaseClient | null {
   const svc = getSupabaseService();

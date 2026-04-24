@@ -369,12 +369,13 @@ export function MapView({
 
   useEffect(() => {
     const token = getToken();
-    if (!token || !containerRef.current) return;
+    const container = containerRef.current;
+    if (!token || !container) return;
 
     mapboxgl.accessToken = token;
     const iv = initialViewRef.current;
     const map = new mapboxgl.Map({
-      container: containerRef.current,
+      container,
       style: "mapbox://styles/mapbox/dark-v11",
       center: iv ? [iv.lng, iv.lat] : DEFAULT_CENTER,
       zoom: iv?.zoom ?? DEFAULT_ZOOM,
@@ -382,6 +383,15 @@ export function MapView({
       pitch: 0,
     });
     mapRef.current = map;
+
+    /** Mapbox often paints a blank (black) canvas if the container had 0×0 at init; keep in sync with layout. */
+    const resizeObserver = new ResizeObserver(() => {
+      map.resize();
+    });
+    resizeObserver.observe(container);
+    queueMicrotask(() => {
+      map.resize();
+    });
     const htmlMarkers = htmlMarkersRef.current;
 
     map.on("error", (e) => {
@@ -389,6 +399,8 @@ export function MapView({
     });
 
     map.on("load", () => {
+      map.resize();
+
       const seekerMarkers = seekerMarkersRef.current;
 
       const syncHtmlMarkers = () => {
@@ -715,6 +727,7 @@ export function MapView({
     });
 
     return () => {
+      resizeObserver.disconnect();
       clearTimeout(viewportTimerRef.current);
       htmlMarkers.forEach((mk) => mk.remove());
       htmlMarkers.clear();
