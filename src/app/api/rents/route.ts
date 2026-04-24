@@ -17,7 +17,8 @@ import {
 import { normalizeRentRow } from "@/lib/rent-mapper";
 import { RENT_ENTRIES_EXPANDED } from "@/lib/rent-table";
 import { SUBMISSION_COOLDOWN_MS } from "@/lib/rent-policy";
-import { getSupabaseRead, getSupabaseService } from "@/lib/supabase/service";
+import { getSupabaseRead } from "@/lib/supabase/service";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   checkCooldownMemory,
   recordSubmission,
@@ -76,20 +77,24 @@ export async function GET(req: Request) {
 }
 
 async function isDeviceBanned(
-  supabase: NonNullable<ReturnType<typeof getSupabaseService>>,
+  supabase: SupabaseClient,
   deviceHash: string,
 ): Promise<boolean> {
   if (isBannedMemory(deviceHash)) return true;
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("banned_posting_devices")
     .select("device_id_hash")
     .eq("device_id_hash", deviceHash)
     .maybeSingle();
+  if (error) {
+    console.warn("[POST /api/rents] banned check skipped (read failed)", error.message);
+    return false;
+  }
   return Boolean(data);
 }
 
 async function assertCooldownOk(
-  supabase: NonNullable<ReturnType<typeof getSupabaseService>>,
+  supabase: SupabaseClient,
   deviceHash: string,
 ): Promise<{ ok: true } | { ok: false; retryAfterSec: number }> {
   const mem = checkCooldownMemory(deviceHash);
@@ -203,7 +208,8 @@ export async function POST(req: Request) {
     );
   }
 
-  const supabase = getSupabaseService();
+  /** Service role if configured; else anon (RLS allows crowdsourced inserts — see 019). */
+  const supabase = getSupabaseRead();
 
   if (supabase) {
     if (await isDeviceBanned(supabase, deviceHash)) {
@@ -319,10 +325,15 @@ export async function POST(req: Request) {
 
   if (!supabase) {
     console.warn(
-      "[POST /api/rents] No Supabase service client — DB insert skipped. Set SUPABASE_SERVICE_ROLE_KEY (service_role secret, not anon) for persisted pins.",
+      "[POST /api/rents] No Supabase client — DB insert skipped. Set NEXT_PUBLIC_SUPABASE_URL + NEXT_PUBLIC_SUPABASE_ANON_KEY (or SUPABASE_SERVICE_ROLE_KEY).",
     );
     const entry = localOnlyEntry();
-    return NextResponse.json({ entry, persisted: false });
+    return NextResponse.json({
+      entry,
+      persisted: false,
+      syncWarning:
+        "This pin exists only on this device. Configure Supabase URL + anon (or service role) on the server.",
+    });
   }
 
   type PgErr = { code?: string; message?: string; details?: string; hint?: string };
@@ -435,7 +446,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         error: rls
-          ? "Database rejected this write (permissions). Ensure the API uses SUPABASE_SERVICE_ROLE_KEY (service_role), not the anon key."
+          ? "Database rejected this write (permissions). Check RLS on areas / rent_entries / rent_sources, or set SUPABASE_SERVICE_ROLE_KEY (service role)."
           : "Could not save this rent pin to the database. Try again in a moment.",
         code: rls ? "RLS_OR_PERMISSION" : "RENT_INSERT_FAILED",
         field: "general" as const,

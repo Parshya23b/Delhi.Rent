@@ -13,7 +13,21 @@ import {
   MapStatusStrip,
 } from "@/components/map/MapUiChrome";
 import { ClusterFlatsSheet } from "@/components/map/ClusterFlatsSheet";
-import { MapView } from "@/components/map/MapView";
+import { SeekerMatchesSheet } from "@/components/map/SeekerMatchesSheet";
+import dynamic from "next/dynamic";
+
+const MapView = dynamic(
+  () => import("@/components/map/MapView").then((m) => m.MapView),
+  {
+    ssr: false,
+    loading: () => (
+      <div
+        className="h-full w-full min-h-[50dvh] bg-zinc-950"
+        aria-hidden
+      />
+    ),
+  },
+);
 import { NearbyRentList } from "@/components/map/NearbyRentList";
 import { OverpayBanner } from "@/components/map/OverpayBanner";
 import { PinDetailSheet } from "@/components/map/PinDetailSheet";
@@ -34,7 +48,9 @@ import {
   monthPointsFromHistoryRows,
   type MonthPoint,
 } from "@/lib/rent-trends";
+import { matchSeeker, type SeekerRentMatch } from "@/lib/match-seeker";
 import { bboxFromCenterZoom } from "@/lib/viewport-bbox";
+import type { SeekerMapPin } from "@/lib/supabase/get-seeker-pins";
 import {
   computeAreaStats,
   entriesNearPoint,
@@ -136,6 +152,72 @@ export function MapExplorer() {
     truncated: boolean;
   } | null>(null);
 
+  const [seekerMatchesSheet, setSeekerMatchesSheet] = useState<SeekerRentMatch[] | null>(null);
+
+  const seekerMatchPinRef = useRef<SeekerMapPin | null>(null);
+  const seekerMatchesLiveRef = useRef(false);
+  const lastRentPoolForMatchesRef = useRef<RentEntry[]>([]);
+
+  const endSeekerMatchesLive = useCallback(() => {
+    seekerMatchesLiveRef.current = false;
+    seekerMatchPinRef.current = null;
+    setSeekerMatchesSheet(null);
+  }, []);
+
+  const onMapEntriesLive = useCallback((entries: RentEntry[]) => {
+    lastRentPoolForMatchesRef.current = entries;
+    const pin = seekerMatchPinRef.current;
+    if (!pin || !seekerMatchesLiveRef.current) return;
+    const next = matchSeeker(
+      {
+        lat: pin.lat,
+        lng: pin.lng,
+        budget: pin.budget,
+        bhk: pin.bhk,
+        radius_km: pin.radius_km,
+      },
+      entries,
+      { limit: 100 },
+    );
+    console.log("[MapExplorer] seeker matches live-refresh (rent pool changed)", {
+      seekerId: pin.id,
+      poolSize: entries.length,
+      matchCount: next.length,
+    });
+    setSeekerMatchesSheet(next);
+  }, []);
+
+  const onSeekerPinsLive = useCallback(
+    (pins: SeekerMapPin[]) => {
+      const pin = seekerMatchPinRef.current;
+      if (!pin || !seekerMatchesLiveRef.current) return;
+      const fresh = pins.find((p) => p.id === pin.id);
+      if (!fresh) {
+        endSeekerMatchesLive();
+        return;
+      }
+      seekerMatchPinRef.current = fresh;
+      const next = matchSeeker(
+        {
+          lat: fresh.lat,
+          lng: fresh.lng,
+          budget: fresh.budget,
+          bhk: fresh.bhk,
+          radius_km: fresh.radius_km,
+        },
+        lastRentPoolForMatchesRef.current,
+        { limit: 100 },
+      );
+      console.log("[MapExplorer] seeker matches live-refresh (seeker pin changed)", {
+        seekerId: fresh.id,
+        poolSize: lastRentPoolForMatchesRef.current.length,
+        matchCount: next.length,
+      });
+      setSeekerMatchesSheet(next);
+    },
+    [endSeekerMatchesLive],
+  );
+
   const [overpay, setOverpay] = useState<{
     open: boolean;
     userRent: number;
@@ -144,6 +226,10 @@ export function MapExplorer() {
   }>({ open: false, userRent: 0, median: 0, pct: 0 });
 
   const [mapError, setMapError] = useState<string | null>(null);
+  /** Shown when POST returned a local-only pin (no DB) so refresh would drop it. */
+  const [persistWarning, setPersistWarning] = useState<string | null>(null);
+  /** Bumps {@link MapView} full Supabase reload for rent + seeker (seeker submit; store alone does not bump seeker). */
+  const [dbPinsReloadKey, setDbPinsReloadKey] = useState(0);
   const [flyTo, setFlyTo] = useState<{
     lng: number;
     lat: number;
@@ -201,9 +287,13 @@ export function MapExplorer() {
     void (async () => {
       try {
         const res = await fetch("/api/rents");
-        const data = await res.json();
+        if (!res.ok) {
+          console.warn("[MapExplorer] GET /api/rents failed", res.status);
+          return;
+        }
+        const data = (await res.json()) as { entries?: RentEntry[] };
         if (!cancelled && data.entries) {
-          mergeEntries(data.entries as RentEntry[]);
+          mergeEntries(data.entries);
         }
       } catch {
         /* ignore */
@@ -227,10 +317,16 @@ export function MapExplorer() {
         maxLng: String(b.maxLng),
       });
       void fetch(`/api/rents?${q}`, { signal: ctrl.signal })
-        .then((r) => r.json())
-        .then((data: { entries?: RentEntry[] }) => {
-          if (cancelled || !data.entries) return;
-          mergeEntries(data.entries as RentEntry[]);
+        .then(async (r) => {
+          if (!r.ok) {
+            console.warn("[MapExplorer] GET /api/rents (bbox) failed", r.status);
+            return;
+          }
+          return r.json() as Promise<{ entries?: RentEntry[] }>;
+        })
+        .then((data) => {
+          if (cancelled || !data?.entries) return;
+          mergeEntries(data.entries);
         })
         .catch(() => {});
     }, 600);
@@ -406,18 +502,20 @@ export function MapExplorer() {
   const onMapClickEmpty = useCallback((lat: number, lng: number) => {
     setSelectedEntry(null);
     setPinOpen(false);
+    endSeekerMatchesLive();
     setAddDraft({ lat, lng, areaLabel: "" });
     void reverseGeocodeShort(lat, lng).then((label) => {
       setAddDraft((d) => (d ? { ...d, areaLabel: label } : d));
     });
     setAddOpen(true);
-  }, []);
+  }, [endSeekerMatchesLive]);
 
   const onSelectEntry = useCallback((e: RentEntry) => {
     setAddOpen(false);
+    endSeekerMatchesLive();
     setSelectedEntry(e);
     setPinOpen(true);
-  }, []);
+  }, [endSeekerMatchesLive]);
 
   const onClusterSelect = useCallback(
     (payload: {
@@ -432,12 +530,60 @@ export function MapExplorer() {
       setPinOpen(false);
       setSelectedEntry(null);
       setClusterSheet(payload);
+      endSeekerMatchesLive();
     },
-    [],
+    [endSeekerMatchesLive],
   );
 
+  const onSelectSeekerPin = useCallback((pin: SeekerMapPin, rentPool: RentEntry[]) => {
+    console.log("[MapExplorer] seeker pin selected — computing matches", {
+      seekerId: pin.id,
+      rentPoolSize: rentPool.length,
+    });
+    setAddOpen(false);
+    setAddDraft(null);
+    setClusterSheet(null);
+    setPinOpen(false);
+    setSelectedEntry(null);
+    seekerMatchPinRef.current = pin;
+    seekerMatchesLiveRef.current = true;
+    lastRentPoolForMatchesRef.current = rentPool;
+    const matches = matchSeeker(
+      {
+        lat: pin.lat,
+        lng: pin.lng,
+        budget: pin.budget,
+        bhk: pin.bhk,
+        radius_km: pin.radius_km,
+      },
+      rentPool,
+      { limit: 100 },
+    );
+    setSeekerMatchesSheet(matches);
+  }, []);
+
   const onSubmitted = useCallback(
-    (_entry: RentEntry, o: { pct: number; median: number }) => {
+    (
+      _entry: RentEntry,
+      o: {
+        pct: number;
+        median: number;
+        persisted: boolean;
+        syncWarning?: string;
+      },
+    ) => {
+      console.log("[MapExplorer] rent pin submitted (store merge will reload map DB pins)", {
+        id: _entry.id,
+        persisted: o.persisted,
+      });
+      if (!o.persisted) {
+        setPersistWarning(
+          o.syncWarning ??
+            "This pin was not saved to the database. Set SUPABASE_SERVICE_ROLE_KEY on the server and redeploy.",
+        );
+      } else {
+        setPersistWarning(null);
+      }
       // Match filters to this listing so the new pill marker is not hidden (BHK/rent/women-only, etc.).
       setMapFilters({
         bhk: _entry.bhk,
@@ -463,6 +609,7 @@ export function MapExplorer() {
       window.setTimeout(() => {
         openLiveStatsDock();
       }, 400);
+      setDbPinsReloadKey((k) => k + 1);
     },
     [setMapFilters, openLiveStatsDock],
   );
@@ -490,9 +637,10 @@ export function MapExplorer() {
     const lng = viewport?.lng ?? 77.2;
     setAddOpen(false);
     setPinOpen(false);
+    endSeekerMatchesLive();
     setSeekerDraft({ lat, lng, areaLabel });
     setSeekerOpen(true);
-  }, [viewport?.lat, viewport?.lng, areaLabel]);
+  }, [viewport?.lat, viewport?.lng, areaLabel, endSeekerMatchesLive]);
 
   const handleCyberIso = async () => {
     if (isochroneGeoJSON) {
@@ -558,8 +706,12 @@ export function MapExplorer() {
             <MapView
               entries={filteredEntries}
               entryById={entryById}
+              dbPinsReloadKey={dbPinsReloadKey}
               onMapClickEmpty={onMapClickEmpty}
               onSelectEntry={onSelectEntry}
+              onSelectSeekerPin={onSelectSeekerPin}
+              onMapEntriesChange={onMapEntriesLive}
+              onSeekerPinsChange={onSeekerPinsLive}
               onClusterSelect={onClusterSelect}
               onViewportChange={setViewport}
               flyToUserOnLoad={flyToUserOnLoad && !initialView}
@@ -777,6 +929,22 @@ export function MapExplorer() {
               </div>
             </div>
 
+            {persistWarning ? (
+              <div
+                className="pointer-events-auto flex items-start gap-2 rounded-xl border border-amber-500/45 bg-amber-950/90 px-3 py-2.5 text-[11px] leading-snug text-amber-100 shadow-lg ring-1 ring-amber-500/20 sm:text-xs"
+                role="status"
+              >
+                <span className="min-w-0 flex-1">{persistWarning}</span>
+                <button
+                  type="button"
+                  className="shrink-0 font-semibold text-amber-200 underline decoration-amber-200/50 underline-offset-2"
+                  onClick={() => setPersistWarning(null)}
+                >
+                  Dismiss
+                </button>
+              </div>
+            ) : null}
+
             <MapStatusStrip
               entryCount={filteredEntries.length}
               totalRentInr={totalRentPinned}
@@ -870,6 +1038,10 @@ export function MapExplorer() {
           setSeekerDraft(null);
         }}
         draft={seekerDraft}
+        onSubmitted={() => {
+          console.log("[MapExplorer] seeker pin created — bumping DB pin reload");
+          setDbPinsReloadKey((k) => k + 1);
+        }}
       />
 
       <PinDetailSheet
@@ -880,6 +1052,15 @@ export function MapExplorer() {
         }}
         entry={selectedEntry}
         allEntries={entries}
+      />
+
+      <SeekerMatchesSheet
+        open={seekerMatchesSheet !== null}
+        onClose={endSeekerMatchesLive}
+        matches={seekerMatchesSheet ?? []}
+        onPickEntry={(m) => {
+          onSelectEntry(m.entry);
+        }}
       />
 
       <ClusterFlatsSheet

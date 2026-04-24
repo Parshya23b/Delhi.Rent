@@ -171,6 +171,117 @@ export async function createSeekerPinWithPreferences(
   return { pin, preferences: pref };
 }
 
+/** Minimal STEP 7 payload: map + budget + BHK only (auth user required). */
+export type CreateSeekerPinPayload = {
+  lat: number;
+  lng: number;
+  budget: number;
+  bhk: number;
+};
+
+/**
+ * Insert `seeker_pins` with only lat/lng/budget/bhk from the client; other columns use
+ * safe defaults. Also inserts a default `seeker_preferences` row (required by schema 012).
+ */
+export async function createSeekerPin(
+  supabase: SupabaseClient,
+  payload: CreateSeekerPinPayload,
+  userId: string,
+) {
+  assert(
+    typeof userId === "string" && userId.length > 0,
+    "UNAUTHORIZED",
+    "Missing authenticated user.",
+    401,
+  );
+
+  const lat = Number(payload.lat);
+  const lng = Number(payload.lng);
+  const budget = Math.round(Number(payload.budget));
+  const bhk = Math.round(Number(payload.bhk));
+
+  assert(Number.isFinite(lat) && lat >= -90 && lat <= 90, "VALIDATION", "lat must be between -90 and 90.");
+  assert(Number.isFinite(lng) && lng >= -180 && lng <= 180, "VALIDATION", "lng must be between -180 and 180.");
+  assert(Number.isFinite(budget) && budget >= 0, "VALIDATION", "budget must be a non-negative number.");
+  assert(Number.isInteger(bhk) && bhk >= 0 && bhk <= 10, "VALIDATION", "bhk must be an integer 0–10.");
+
+  const pinRow = {
+    user_id: userId,
+    lat,
+    lng,
+    radius_km: 2,
+    intent_type: "whole_flat" as const,
+    budget,
+    bhk_preference: bhk,
+    move_in: "flexible" as const,
+    is_active: true,
+  };
+
+  const { data: pin, error: pinErr } = await supabase
+    .from("seeker_pins")
+    .insert(pinRow)
+    .select("id, user_id, lat, lng, budget, bhk_preference, move_in, created_at")
+    .single();
+
+  if (pinErr || !pin) {
+    const code = pinErr?.code;
+    if (code === "23505") {
+      throw new SeekerServiceError(
+        "DUPLICATE_LOCATION",
+        "You already have a seeker pin at this location (rounded coordinates).",
+        409,
+        pinErr,
+      );
+    }
+    if (code === "23514" || (pinErr?.message ?? "").toLowerCase().includes("maximum 3 pins")) {
+      throw new SeekerServiceError(
+        "PIN_LIMIT",
+        "Maximum of 3 seeker pins per account.",
+        403,
+        pinErr,
+      );
+    }
+    throw new SeekerServiceError(
+      "PIN_CREATE_FAILED",
+      pinErr?.message ?? "Could not create seeker pin.",
+      400,
+      pinErr,
+    );
+  }
+
+  const prefRow = {
+    seeker_id: pin.id as string,
+    food_pref: "any" as const,
+    smoking_pref: "no_preference" as const,
+    gender: "other" as const,
+    preferred_gender: "any" as const,
+    sleep_pattern: "flexible" as const,
+    work_type: "hybrid" as const,
+    social_level: "moderate" as const,
+    cleanliness_level: "medium" as const,
+  };
+
+  const { data: pref, error: prefErr } = await supabase
+    .from("seeker_preferences")
+    .insert(prefRow)
+    .select(
+      "id, seeker_id, food_pref, smoking_pref, gender, preferred_gender, sleep_pattern, work_type, social_level, cleanliness_level",
+    )
+    .single();
+
+  if (prefErr || !pref) {
+    await supabase.from("seeker_pins").delete().eq("id", pin.id as string);
+    throw new SeekerServiceError(
+      "PREFERENCES_CREATE_FAILED",
+      prefErr?.message ?? "Could not save preferences.",
+      400,
+      prefErr,
+    );
+  }
+
+  return { pin, preferences: pref };
+}
+
 export async function runMatchSeeker(supabase: SupabaseClient, seekerPinId: string) {
   assert(
     typeof seekerPinId === "string" && seekerPinId.length > 0,
