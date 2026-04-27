@@ -1,0 +1,18 @@
+# Supabase local / deploy config. Set project_id via `supabase link` or paste from dashboard.
+
+project_id = "your-project-ref"
+
+[api]
+enabled = true
+
+[functions.create-pin]
+verify_jwt = false
+
+[functions.get-pins]
+verify_jwt = false
+
+[functions.report-pin]
+verify_jwt = false
+
+[functions.cleanup-expired-pins]
+verify_jwt = false

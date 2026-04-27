@@ -936,3 +936,11 @@ create policy "Allow public read"
   using (true);
 
 grant select on table public.rent_entries to anon, authenticated;
+
+-- ============================================================
+-- Geo rental matching (pins / matches / reports + Edge RPCs)
+-- ============================================================
+-- Apply via Supabase CLI migrations:
+--   supabase/migrations/008_geo_rental_matching.sql
+--   supabase/migrations/009_realtime_pins.sql (optional Realtime)
+-- Or paste those files after this bundle in the SQL editor.
