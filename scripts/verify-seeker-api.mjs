@@ -25,7 +25,6 @@ const required = [
   "src/routes/contact.http.ts",
   "src/lib/http/api-response.ts",
   "src/lib/supabase/user-server-client.ts",
-  "src/lib/supabase/seeker-realtime.ts",
   "src/lib/auth/constants.ts",
   "src/middleware.ts",
 ];

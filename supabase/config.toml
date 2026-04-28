@@ -1,18 +1,7 @@
-# Supabase local / deploy config. Set project_id via `supabase link` or paste from dashboard.
+# Supabase CLI: set project_id via `supabase link` or paste from the dashboard.
+# Edge Functions were removed — this app uses Next.js API routes + Postgres migrations only.
 
 project_id = "your-project-ref"
 
 [api]
 enabled = true
-
-[functions.create-pin]
-verify_jwt = false
-
-[functions.get-pins]
-verify_jwt = false
-
-[functions.report-pin]
-verify_jwt = false
-
-[functions.cleanup-expired-pins]
-verify_jwt = false

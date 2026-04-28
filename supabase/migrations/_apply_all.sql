@@ -938,10 +938,7 @@ create policy "Allow public read"
 grant select on table public.rent_entries to anon, authenticated;
 
 -- ============================================================
--- Geo rental matching (pins / matches / reports + Edge RPCs)
+-- Women-only column restore (run if not already applied)
 -- ============================================================
--- Apply via Supabase CLI migrations:
---   supabase/migrations/008_geo_rental_matching.sql
---   supabase/migrations/009_realtime_pins.sql (optional Realtime)
---   supabase/migrations/025_rent_entries_women_only_restore.sql (women_only column + view)
--- Or paste those files after this bundle in the SQL editor.
+--   supabase/migrations/025_rent_entries_women_only_restore.sql
+-- Or paste that file after this bundle in the SQL editor.
