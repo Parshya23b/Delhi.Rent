@@ -938,7 +938,8 @@ create policy "Allow public read"
 grant select on table public.rent_entries to anon, authenticated;
 
 -- ============================================================
--- Women-only column restore (run if not already applied)
--- ============================================================
+-- Legacy bundle ends above. For a full geo-only reset (replaces rent_entries):
+--   supabase/migrations/026_geo_rental_platform_reset.sql
+-- Optional older fix only if you still use rent_entries + view:
 --   supabase/migrations/025_rent_entries_women_only_restore.sql
--- Or paste that file after this bundle in the SQL editor.
+-- ============================================================

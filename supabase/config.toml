@@ -1,7 +1,10 @@
-# Supabase CLI: set project_id via `supabase link` or paste from the dashboard.
-# Edge Functions were removed — this app uses Next.js API routes + Postgres migrations only.
+# Supabase CLI — set project_id via `supabase link`.
+# Geo platform (026): optional Edge job for match emails (mock logger).
 
 project_id = "your-project-ref"
 
 [api]
 enabled = true
+
+[functions.send-match-notifications]
+verify_jwt = false
