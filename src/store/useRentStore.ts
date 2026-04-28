@@ -1,18 +1,9 @@
 "use client";
 
-import type { MapFilterState } from "@/lib/filter-entries";
+import { DEFAULT_MAP_FILTERS, type MapFilterState } from "@/lib/filter-entries";
 import type { RentEntry } from "@/types/rent";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-
-const defaultMapFilters: MapFilterState = {
-  bhk: "all",
-  furnishing: "all",
-  rentMin: null,
-  rentMax: null,
-  last12MonthsOnly: false,
-  womenOnly: false,
-};
 
 const defaultLayers = {
   metro: true,
@@ -66,7 +57,8 @@ interface RentState {
 }
 
 /** Bumped when persisted shape changes — v3 drops `entries`; v4 resets womenOnly filter after DB/view fix. */
-const PERSIST_VERSION = 4;
+/** v5: one-time reset of persisted map filters so refresh shows all pins (not a stale narrow BHK/women-only, etc.). */
+const PERSIST_VERSION = 5;
 
 export const useRentStore = create<RentState>()(
   persist(
@@ -97,7 +89,7 @@ export const useRentStore = create<RentState>()(
       setShowHeatmap: (v) => set({ showHeatmap: v }),
       layers: { ...defaultLayers },
       setLayers: (p) => set({ layers: { ...get().layers, ...p } }),
-      mapFilters: defaultMapFilters,
+      mapFilters: DEFAULT_MAP_FILTERS,
       setMapFilters: (p) =>
         set({ mapFilters: { ...get().mapFilters, ...p } }),
     }),
@@ -112,21 +104,13 @@ export const useRentStore = create<RentState>()(
       migrate: (persisted, fromVersion) => {
         const p = (persisted ?? {}) as Record<string, unknown>;
         if (fromVersion < PERSIST_VERSION) {
-          const mapFilters: MapFilterState = {
-            ...defaultMapFilters,
-            ...(p.mapFilters as Partial<MapFilterState>),
-          };
-          // Before v4, rent_entries_expanded always exposed women_only=false, so womenOnly=true hid all pins.
-          if (fromVersion < 4) {
-            mapFilters.womenOnly = false;
-          }
           return {
             hasContributed: Boolean(p.hasContributed),
             layers: {
               ...defaultLayers,
               ...(p.layers as RentState["layers"] | undefined),
             },
-            mapFilters,
+            mapFilters: { ...DEFAULT_MAP_FILTERS },
           };
         }
         return persisted as PersistedSlice;

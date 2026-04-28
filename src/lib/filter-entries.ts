@@ -10,6 +10,16 @@ export type MapFilterState = {
   womenOnly: boolean;
 };
 
+/** Show every listing on the map (used as store default and after a successful pin submit). */
+export const DEFAULT_MAP_FILTERS: MapFilterState = {
+  bhk: "all",
+  furnishing: "all",
+  rentMin: null,
+  rentMax: null,
+  last12MonthsOnly: false,
+  womenOnly: false,
+};
+
 const MS_12M = 365 * 24 * 60 * 60 * 1000;
 
 function withinLast12Months(e: RentEntry): boolean {

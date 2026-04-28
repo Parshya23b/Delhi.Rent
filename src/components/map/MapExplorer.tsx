@@ -34,7 +34,7 @@ import { PinDetailSheet } from "@/components/map/PinDetailSheet";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { useLocale } from "@/components/i18n/LocaleProvider";
 import { computeBuildingClusters } from "@/lib/building-clusters";
-import { filterRentEntries } from "@/lib/filter-entries";
+import { DEFAULT_MAP_FILTERS, filterRentEntries } from "@/lib/filter-entries";
 import { reverseGeocodeShort } from "@/lib/mapbox-geocode";
 import {
   addWatchlistItem,
@@ -584,15 +584,9 @@ export function MapExplorer() {
       } else {
         setPersistWarning(null);
       }
-      // Match filters to this listing so the new pill marker is not hidden (BHK/rent/women-only, etc.).
-      setMapFilters({
-        bhk: _entry.bhk,
-        furnishing: _entry.furnishing ?? "all",
-        rentMin: null,
-        rentMax: null,
-        last12MonthsOnly: false,
-        womenOnly: Boolean(_entry.women_only),
-      });
+      // Reset filters so the full map (all BHK / furnishing / rent pins) is visible, including this one.
+      // Persisted filters are saved; after submit we intentionally show everything again.
+      setMapFilters({ ...DEFAULT_MAP_FILTERS });
       setFlyTo({
         lng: _entry.lng,
         lat: _entry.lat,
