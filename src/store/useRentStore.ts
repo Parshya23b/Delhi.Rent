@@ -65,8 +65,8 @@ interface RentState {
   setMapFilters: (p: Partial<MapFilterState>) => void;
 }
 
-/** Bumped when persisted shape changes — v3 drops `entries` so map truth is always from DB/API. */
-const PERSIST_VERSION = 3;
+/** Bumped when persisted shape changes — v3 drops `entries`; v4 resets womenOnly filter after DB/view fix. */
+const PERSIST_VERSION = 4;
 
 export const useRentStore = create<RentState>()(
   persist(
@@ -112,13 +112,21 @@ export const useRentStore = create<RentState>()(
       migrate: (persisted, fromVersion) => {
         const p = (persisted ?? {}) as Record<string, unknown>;
         if (fromVersion < PERSIST_VERSION) {
+          const mapFilters: MapFilterState = {
+            ...defaultMapFilters,
+            ...(p.mapFilters as Partial<MapFilterState>),
+          };
+          // Before v4, rent_entries_expanded always exposed women_only=false, so womenOnly=true hid all pins.
+          if (fromVersion < 4) {
+            mapFilters.womenOnly = false;
+          }
           return {
             hasContributed: Boolean(p.hasContributed),
             layers: {
               ...defaultLayers,
               ...(p.layers as RentState["layers"] | undefined),
             },
-            mapFilters: { ...defaultMapFilters, ...(p.mapFilters as Partial<MapFilterState>) },
+            mapFilters,
           };
         }
         return persisted as PersistedSlice;

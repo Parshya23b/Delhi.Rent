@@ -408,6 +408,7 @@ export async function POST(req: Request) {
     rent: rent_inr,
     bhk,
     furnishing: furnishingVal,
+    women_only,
   };
   console.log("[POST /api/rents] rent_entries.insert payload", {
     ...rentEntryPayload,
@@ -419,7 +420,7 @@ export async function POST(req: Request) {
   const { data: rentRow, error: rentErr } = await supabase
     .from("rent_entries")
     .insert([rentEntryPayload])
-    .select("id, area_id, rent, bhk, furnishing, created_at")
+    .select("id, area_id, rent, bhk, furnishing, women_only, created_at")
     .single();
 
   console.log("[POST /api/rents] rent_entries.insert response", {

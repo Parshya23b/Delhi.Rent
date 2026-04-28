@@ -14,7 +14,7 @@ async function fetchExpandedRentPin(
 ): Promise<RentPin | null> {
   const { data, error } = await supabase
     .from(RENT_ENTRIES_EXPANDED)
-    .select("id, lat, lng, rent_inr, bhk, created_at")
+    .select("id, lat, lng, rent_inr, bhk, created_at, women_only, furnishing")
     .eq("id", id)
     .maybeSingle();
 

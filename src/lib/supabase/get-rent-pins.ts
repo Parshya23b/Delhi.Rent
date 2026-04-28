@@ -17,6 +17,8 @@ export type RentPin = {
   rent: number;
   bhk: string;
   created_at: string;
+  women_only: boolean;
+  furnishing: string | null;
 };
 
 /** Map a DB pin to the app’s `RentEntry` shape (for clustering / markers). */
@@ -30,11 +32,11 @@ export function rentPinToRentEntry(p: RentPin): RentEntry {
     area_label: null,
     move_in_month: null,
     broker_or_owner: null,
-    furnishing: null,
+    furnishing: p.furnishing,
     maintenance_inr: null,
     deposit_inr: null,
     opt_in_building_aggregate: false,
-    women_only: false,
+    women_only: Boolean(p.women_only),
     created_at: p.created_at,
     verification_status: "unverified",
     confirmations_count: 0,
@@ -65,6 +67,11 @@ function rowToRentPin(row: Record<string, unknown>): RentPin | null {
       row.created_at != null && row.created_at !== ""
         ? String(row.created_at)
         : new Date().toISOString(),
+    women_only: Boolean(row.women_only),
+    furnishing:
+      row.furnishing != null && String(row.furnishing).trim() !== ""
+        ? String(row.furnishing)
+        : null,
   };
 }
 
@@ -85,7 +92,7 @@ export async function getRentPins(
 
   const { data, error } = await supabase
     .from(RENT_ENTRIES_EXPANDED)
-    .select("id, lat, lng, rent_inr, bhk, created_at")
+    .select("id, lat, lng, rent_inr, bhk, created_at, women_only, furnishing")
     .order("created_at", { ascending: false });
 
   if (error) {
